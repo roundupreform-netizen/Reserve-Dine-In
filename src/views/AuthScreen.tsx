@@ -39,15 +39,15 @@ export default function AuthScreen() {
 
         <div className="w-full max-w-xs mx-auto">
           <Button 
-            className="w-full h-16 bg-white text-black hover:bg-gray-100 shadow-[0_15px_35px_rgba(255,255,255,0.1)] border-none rounded-[1.25rem] text-sm font-bold"
+            className="w-full h-16 bg-emerald-500 text-white hover:bg-emerald-600 shadow-[0_15px_35px_rgba(16,185,129,0.2)] border-none rounded-[1.25rem] text-sm font-black uppercase tracking-[0.2em]"
             onClick={signInWithGoogle}
           >
-            <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-            Continue with Google
+            <LogIn size={20} />
+            Enter Dashboard
           </Button>
           
           <p className="text-[9px] text-white/10 uppercase tracking-[0.3em] font-bold mt-8">
-            Enterprise Cloud Secure
+            Internal Management Access
           </p>
         </div>
       </motion.div>

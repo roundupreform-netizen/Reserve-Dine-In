@@ -43,6 +43,7 @@ export default function ReservationScreen() {
         session,
         specialRequest,
         status: 'reserved',
+        reservationType: 'table',
         createdAt: serverTimestamp(),
       });
       setCompleted(true);
