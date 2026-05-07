@@ -26,14 +26,23 @@ export default function ReservationScreen() {
     if (!user) return;
     setLoading(true);
     try {
+      // Determine session based on time
+      const hour = parseInt(time.split(':')[0]);
+      let session = 'Evening';
+      if (hour < 12) session = 'Breakfast';
+      else if (hour < 16) session = 'Lunch';
+      else if (hour < 19) session = 'Evening';
+      else session = 'Dinner';
+
       await addDoc(collection(db, 'reservations'), {
         userId: user.uid,
-        userName: user.displayName,
+        guestName: user.displayName || 'Guest',
         date,
         time,
         guests,
+        session,
         specialRequest,
-        status: 'pending',
+        status: 'reserved',
         createdAt: serverTimestamp(),
       });
       setCompleted(true);

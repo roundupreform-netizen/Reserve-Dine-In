@@ -19,16 +19,32 @@
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
-        "userName": { "type": "string" },
+        "reservationType": { "type": "string", "enum": ["table", "section"] },
+        "sectionId": { "type": "string" },
+        "tables": { "type": "array", "items": { "type": "integer" } },
+        "guestName": { "type": "string" },
+        "phone": { "type": "string" },
         "date": { "type": "string", "format": "date" },
         "time": { "type": "string" },
+        "session": { "type": "string", "enum": ["Breakfast", "Lunch", "Evening", "Dinner"] },
         "guests": { "type": "integer" },
+        "tableNumber": { "type": "integer" },
         "specialRequest": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled", "completed"] },
-        "tableId": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "reserved", "occupied", "VIP"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "date", "time", "guests", "status"]
+      "required": ["guestName", "date", "time", "guests", "status", "session", "reservationType"]
+    },
+    "Section": {
+      "title": "Section",
+      "description": "Restaurant section management",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "tables": { "type": "array", "items": { "type": "integer" } },
+        "status": { "type": "string", "enum": ["available", "reserved", "maintenance"] }
+      },
+      "required": ["name", "tables", "status"]
     },
     "Revenue": {
       "title": "Revenue",
@@ -50,6 +66,10 @@
     "reservations/{reservationId}": {
       "schema": "Reservation",
       "description": "Collection of all reservations"
+    },
+    "sections/{sectionId}": {
+      "schema": "Section",
+      "description": "Collection of restaurant sections"
     },
     "revenue/{revenueId}": {
       "schema": "Revenue",
