@@ -1,75 +1,94 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
+    // Default Deny
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Global helpers
+    // Helper Functions
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
     function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
-             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
     }
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity Validations
+    function isValidOutlet(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             (data.phone == null || (data.phone is string && data.phone.size() <= 20)) &&
+             (data.email == null || (data.email is string && data.email.size() <= 100));
+    }
+
     function isValidReservation(data) {
-      return data.keys().hasAll(['guestName', 'date', 'time', 'guests', 'status', 'session', 'reservationType']) &&
-             data.guests is int && data.guests > 0 &&
-             data.status in ['available', 'reserved', 'occupied', 'VIP'] &&
-             data.date is string &&
-             data.time is string &&
-             data.session in ['Breakfast', 'Lunch', 'Evening', 'Dinner'] &&
-             data.reservationType in ['table', 'section'];
+      return data.guestName is string && data.guestName.size() <= 100 &&
+             data.phone is string && data.phone.size() <= 20 &&
+             data.guests is int && data.guests > 0 && data.guests <= 100 &&
+             data.date is string && data.status in ['pending', 'confirmed', 'seated', 'cancelled', 'completed', 'VIP'];
     }
 
-    function isValidSection(data) {
-      return data.keys().hasAll(['name', 'tables', 'status']) &&
-             data.name is string &&
-             data.tables is list &&
-             data.status in ['available', 'reserved', 'maintenance'];
-    }
-
-    function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'role']) &&
-             data.uid == request.auth.uid &&
-             data.role in ['customer', 'admin'] &&
-             data.email is string &&
-             data.email.size() > 0;
-    }
-
+    // Collections
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
-      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'email']) && isValidUser(request.resource.data);
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
     }
 
-    match /reservations/{reservationId} {
-      allow list: if isSignedIn() || isAdmin(); // More permissive for testing/restricted app
-      allow get: if isSignedIn() || isAdmin();
-      allow create: if isAdmin() && isValidId(reservationId) && isValidReservation(request.resource.data);
-      allow update: if isAdmin() && isValidReservation(request.resource.data);
+    match /outlets/{outletId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidOutlet(incoming()) && isValidId(outletId);
+    }
+
+    match /reservations/{resId} {
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && isValidReservation(incoming()) && isValidId(resId);
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'tableId', 'sectionId', 'time', 'guests']))
+      ) && isValidReservation(incoming());
       allow delete: if isAdmin();
     }
 
-    match /sections/{sectionId} {
-      allow read: if isSignedIn() || isAdmin();
-      allow create, update, delete: if isAdmin() && isValidSection(request.resource.data);
+    match /tables/{tableId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
-    match /revenue/{revenueId} {
-      allow read, write: if isAdmin();
+    match /sections/{sectionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /halls/{hallId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /menuItems/{itemId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only manageable via console
     }
   }
 }

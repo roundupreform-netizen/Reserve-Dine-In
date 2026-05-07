@@ -8,72 +8,101 @@
         "uid": { "type": "string" },
         "email": { "type": "string" },
         "displayName": { "type": "string" },
-        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "role": { "type": "string", "enum": ["staff", "admin"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "role"]
     },
-    "Reservation": {
-      "title": "Reservation",
-      "description": "Restaurant reservation details",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "reservationType": { "type": "string", "enum": ["table", "section"] },
-        "sectionId": { "type": "string" },
-        "tables": { "type": "array", "items": { "type": "integer" } },
-        "guestName": { "type": "string" },
-        "phone": { "type": "string" },
-        "date": { "type": "string", "format": "date" },
-        "time": { "type": "string" },
-        "session": { "type": "string", "enum": ["Breakfast", "Lunch", "Evening", "Dinner"] },
-        "guests": { "type": "integer" },
-        "tableNumber": { "type": "integer" },
-        "specialRequest": { "type": "string" },
-        "status": { "type": "string", "enum": ["available", "reserved", "occupied", "VIP"] },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["guestName", "date", "time", "guests", "status", "session", "reservationType"]
-    },
-    "Section": {
-      "title": "Section",
-      "description": "Restaurant section management",
+    "Outlet": {
+      "title": "Outlet",
+      "description": "Restaurant outlet configuration",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "tables": { "type": "array", "items": { "type": "integer" } },
-        "status": { "type": "string", "enum": ["available", "reserved", "maintenance"] }
-      },
-      "required": ["name", "tables", "status"]
+        "logo": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "gstNumber": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "country": { "type": "string" },
+        "openingHours": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
     },
-    "Revenue": {
-      "title": "Revenue",
-      "description": "Daily revenue analytics",
+    "Reservation": {
+      "title": "Reservation",
+      "description": "Enhanced reservation details",
       "type": "object",
       "properties": {
+        "guestName": { "type": "string" },
+        "phone": { "type": "string" },
+        "guests": { "type": "integer" },
         "date": { "type": "string", "format": "date" },
-        "amount": { "type": "number" },
-        "reservationCount": { "type": "integer" }
+        "time": { "type": "string" },
+        "session": { "type": "string" },
+        "tableId": { "type": "string" },
+        "sectionId": { "type": "string" },
+        "hallId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "seated", "cancelled", "completed", "VIP"] },
+        "notes": { "type": "string" },
+        "preorderIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["date", "amount"]
+      "required": ["guestName", "phone", "date", "status"]
+    },
+    "Table": {
+      "title": "Table",
+      "description": "Individual table configuration",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "sectionId": { "type": "string" },
+        "capacity": { "type": "integer" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      }
+    },
+    "Section": {
+      "title": "Section",
+      "description": "Restaurant sections",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "hallId": { "type": "string" }
+      }
+    },
+    "Hall": {
+      "title": "Hall",
+      "description": "Event halls for high tea",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "capacity": { "type": "integer" },
+        "basePrice": { "type": "number" }
+      }
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "Food and beverage items",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "image": { "type": "string" },
+        "isAvailable": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["veg", "non-veg"] },
+        "menuType": { "type": "string", "enum": ["dine-in", "high-tea"] }
+      }
     }
   },
   "firestore": {
-    "users/{userId}": {
-      "schema": "User",
-      "description": "Collection of users"
-    },
-    "reservations/{reservationId}": {
-      "schema": "Reservation",
-      "description": "Collection of all reservations"
-    },
-    "sections/{sectionId}": {
-      "schema": "Section",
-      "description": "Collection of restaurant sections"
-    },
-    "revenue/{revenueId}": {
-      "schema": "Revenue",
-      "description": "Collection of daily revenue stats"
-    }
+    "outlets/{outletId}": { "schema": "Outlet", "description": "Restaurant outlets" },
+    "reservations/{reservationId}": { "schema": "Reservation", "description": "All bookings" },
+    "tables/{tableId}": { "schema": "Table", "description": "Restaurant tables" },
+    "sections/{sectionId}": { "schema": "Section", "description": "Restaurant sections" },
+    "halls/{hallId}": { "schema": "Hall", "description": "Event halls" },
+    "menuItems/{itemId}": { "schema": "MenuItem", "description": "Master menu" }
   }
 }

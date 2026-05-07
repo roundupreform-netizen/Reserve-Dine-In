@@ -29,7 +29,13 @@ export default function DashboardScreen() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [detailsModalReservation, setDetailsModalReservation] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<'tables' | 'sections'>('tables');
+  const [viewMode, setViewMode] = useState<'tables' | 'sections' | 'list'>('tables');
+  
+  // Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  const [isFilterVisible, setIsFilterVisible] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -148,9 +154,19 @@ export default function DashboardScreen() {
   const formattedDate = currentTime.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
   const formattedTime = currentTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-  // Generate table status based on current session and date
-  const todayStr = currentTime.toISOString().split('T')[0];
+  // Generate table status based on current session and filters
+  const todayStr = dateFilter;
   
+  const filteredReservations = reservations.filter(r => {
+    const matchesSearch = r.guestName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         r.phone?.includes(searchQuery);
+    const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+    const matchesSession = r.session === activeSession;
+    const matchesDate = r.date === todayStr;
+    
+    return matchesSearch && matchesStatus && (viewMode === 'list' ? true : (matchesSession && matchesDate));
+  });
+
   const allTables = Array.from({ length: TABLE_COUNT }, (_, i) => {
     const tableNum = i + 1;
     
@@ -158,6 +174,8 @@ export default function DashboardScreen() {
     const reservation = reservations.find(r => 
       r.date === todayStr && 
       r.session === activeSession &&
+      (statusFilter === 'all' || r.status === statusFilter) &&
+      (searchQuery === '' || r.guestName?.toLowerCase().includes(searchQuery.toLowerCase())) &&
       (
         (r.reservationType === 'table' && r.tableNumber === tableNum) ||
         ((r.reservationType === 'section' || r.reservationType === 'multi') && r.tables?.includes(tableNum))
@@ -223,140 +241,242 @@ export default function DashboardScreen() {
         </button>
       </aside>
 
-      <main className="flex-1 p-8 lg:p-12 overflow-y-auto relative h-screen">
+      <main className="flex-1 p-4 lg:p-12 overflow-y-auto relative h-screen">
         {/* Header Section */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-1">
-            <h2 className="text-white/40 text-sm font-medium tracking-wide">Hello, {userData?.displayName?.split(' ')[0] || 'Admin'} 👋</h2>
-            <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-white/40 bg-clip-text text-transparent">{getGreeting()}</h1>
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-4 lg:mb-12">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-0.5">
+            <h1 className="text-xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-white to-white/40 bg-clip-text text-transparent">Dine-In Hub</h1>
+            <p className="text-white/20 text-[8px] lg:text-sm font-medium uppercase tracking-widest hidden lg:block">System Online</p>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-white/[0.03] border border-white/5 rounded-3xl p-5 flex items-center gap-6 backdrop-blur-xl">
-            <div className="flex items-center gap-3">
-              <Calendar size={18} className="text-emerald-400" />
-              <span className="text-sm font-semibold text-white/80">{formattedDate}</span>
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-white/[0.03] border border-white/5 rounded-xl lg:rounded-3xl p-2 lg:p-5 flex items-center gap-4 backdrop-blur-xl w-full md:w-auto justify-between lg:justify-start">
+            <div className="flex items-center gap-2">
+              <Clock size={12} className="text-emerald-400 lg:w-[18px] lg:h-[18px]" />
+              <span className="text-[10px] lg:text-sm font-mono font-bold text-emerald-400 tracking-wider transition-all duration-500">{formattedTime}</span>
             </div>
             <div className="h-4 w-px bg-white/10" />
-            <div className="flex items-center gap-3 min-w-[100px]">
-              <Clock size={18} className="text-emerald-400" />
-              <span className="text-sm font-mono font-bold text-emerald-400 tracking-wider transition-all duration-500">{formattedTime}</span>
+            <div className="flex items-center gap-2">
+              <Calendar size={12} className="text-white/20" />
+              <span className="text-[10px] lg:text-sm font-semibold text-white/40">{formattedDate}</span>
             </div>
           </motion.div>
         </header>
 
         {/* Filters and Title */}
-        <div className="flex flex-col md:flex-row justify-between items-end gap-8 mb-10">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <h3 className="text-2xl font-bold tracking-tight">Today's Reservations</h3>
-            {/* Session Selector */}
-            <div className="flex bg-white/[0.02] p-1.5 rounded-2xl border border-white/[0.05] backdrop-blur-sm shadow-2xl">
+        <div className="flex flex-col gap-4 mb-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3">
+            <div className="flex bg-white/[0.02] p-1 rounded-xl border border-white/[0.05] backdrop-blur-sm overflow-x-auto no-scrollbar gap-1 w-full md:w-auto">
               {SESSIONS.map((session) => (
                 <button
                   key={session}
                   onClick={() => setActiveSession(session)}
                   className={cn(
-                    "px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-500",
+                    "px-3 lg:px-6 py-1.5 lg:py-2.5 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all whitespace-nowrap flex-1 md:flex-none",
                     activeSession === session 
-                      ? "bg-emerald-500 text-white shadow-[0_10px_25px_rgba(16,185,129,0.3)] scale-105" 
-                      : "text-white/30 hover:text-white/60"
+                      ? "bg-emerald-500 text-white shadow-lg" 
+                      : "text-white/20 hover:text-white/40"
                   )}
                 >
                   {session}
                 </button>
               ))}
             </div>
-          </motion.div>
 
-          <div className="flex gap-4">
-            <div className="bg-white/[0.02] p-1.5 rounded-2xl border border-white/[0.05] flex backdrop-blur-sm">
+            <div className="flex gap-2 w-full md:w-auto">
+              <div className="bg-white/[0.02] p-1 rounded-xl border border-white/[0.05] flex backdrop-blur-sm flex-1 md:flex-initial">
+                {['tables', 'sections', 'list'].map((mode) => (
+                  <button 
+                    key={mode}
+                    onClick={() => setViewMode(mode as any)}
+                    className={cn(
+                      "flex-1 md:px-4 py-1.5 rounded-lg text-[8px] font-bold uppercase tracking-widest transition-all",
+                      viewMode === mode ? "bg-white/10 text-white" : "text-white/20"
+                    )}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
               <button 
-                onClick={() => setViewMode('tables')}
+                onClick={() => setIsFilterVisible(!isFilterVisible)}
                 className={cn(
-                  "px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
-                  viewMode === 'tables' ? "bg-white/10 text-white shadow-xl" : "text-white/20 hover:text-white/40"
+                  "w-10 h-10 flex items-center justify-center rounded-xl border transition-all",
+                  isFilterVisible || searchQuery || statusFilter !== 'all'
+                    ? "bg-emerald-500 text-white border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+                    : "bg-white/5 text-white/40 border-white/10"
                 )}
               >
-                Tables
+                <Filter size={18} />
               </button>
-              <button 
-                onClick={() => setViewMode('sections')}
-                className={cn(
-                  "px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
-                  viewMode === 'sections' ? "bg-white/10 text-white shadow-xl" : "text-white/20 hover:text-white/40"
-                )}
-              >
-                Sections
-              </button>
-            </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/20 px-6 py-3 rounded-2xl flex items-center gap-4">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_12px_#10B981]" />
-              <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">
-                {reservations.filter(r => r.date === todayStr && r.session === activeSession).length} Booked
-              </span>
             </div>
           </div>
+
+          <AnimatePresence>
+            {(isFilterVisible || searchQuery || statusFilter !== 'all') && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-3 md:p-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
+                    <input 
+                      type="text"
+                      placeholder="Search guest or phone..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full h-10 pl-9 pr-4 bg-white/5 border border-white/5 rounded-xl text-[10px] font-bold uppercase tracking-widest focus:border-emerald-500/50 transition-all outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="flex-1 h-10 bg-white/5 border border-white/5 rounded-xl text-[10px] font-bold uppercase tracking-widest px-3 outline-none focus:border-emerald-500/50"
+                    >
+                      <option value="all" className="bg-[#121215]">All Status</option>
+                      <option value="reserved" className="bg-[#121215]">Reserved</option>
+                      <option value="occupied" className="bg-[#121215]">Occupied</option>
+                      <option value="VIP" className="bg-[#121215]">VIP</option>
+                    </select>
+                    <input 
+                      type="date"
+                      value={dateFilter}
+                      onChange={(e) => setDateFilter(e.target.value)}
+                      className="flex-1 h-10 bg-white/5 border border-white/5 rounded-xl text-[10px] font-bold uppercase tracking-widest px-3 outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setSearchQuery('');
+                      setStatusFilter('all');
+                      setDateFilter(new Date().toISOString().split('T')[0]);
+                    }}
+                    className="h-10 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Stats Summary Section */}
-        <motion.section 
-          initial={{ opacity: 0, y: 10 }} 
-          animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10"
-        >
-          {[
-            { label: 'Today Total', value: stats.total, color: 'text-white', bg: 'bg-white/5', icon: Calendar },
-            { label: 'Available', value: stats.available, color: 'text-emerald-500', bg: 'bg-emerald-500/10', icon: Check },
-            { label: 'Reserved', value: stats.reserved, color: 'text-red-500', bg: 'bg-red-500/10', icon: Clock },
-            { label: 'Sections', value: stats.sectionsReserved, color: 'text-orange-500', bg: 'bg-orange-500/10', icon: MapPin },
-            { label: 'VIP', value: stats.vip, color: 'text-purple-500', bg: 'bg-purple-500/10', icon: Bell },
-          ].map((item, i) => (
-            <div key={i} className={cn(
-              "p-6 rounded-[2rem] border border-white/[0.05] backdrop-blur-xl flex flex-col justify-between h-32 transition-all hover:scale-105",
-              item.bg
-            )}>
-              <div className="flex justify-between items-start">
-                <item.icon size={16} className={cn("opacity-40", item.color)} />
-                <span className={cn("text-[9px] font-black uppercase tracking-[0.2em]", item.color)}>{item.label}</span>
+        {/* Stats Summary Section - Horizontal Scroll on Mobile */}
+        <div className="overflow-x-auto no-scrollbar -mx-4 px-4 mb-6">
+          <motion.section 
+            initial={{ opacity: 0, y: 10 }} 
+            animate={{ opacity: 1, y: 0 }}
+            className="flex md:grid md:grid-cols-5 gap-2 min-w-max md:min-w-0 pb-2"
+          >
+            {[
+              { label: 'Tot', value: stats.total, color: 'text-white', bg: 'bg-white/5', icon: Calendar },
+              { label: 'Free', value: stats.available, color: 'text-emerald-500', bg: 'bg-emerald-500/10', icon: Check },
+              { label: 'Res', value: stats.reserved, color: 'text-red-500', bg: 'bg-red-500/10', icon: Clock },
+              { label: 'Sec', value: stats.sectionsReserved, color: 'text-orange-500', bg: 'bg-orange-500/10', icon: MapPin },
+              { label: 'VIP', value: stats.vip, color: 'text-purple-500', bg: 'bg-purple-500/10', icon: Bell },
+            ].map((item, i) => (
+              <div key={i} className={cn(
+                "p-2 lg:p-6 rounded-xl lg:rounded-[2rem] border border-white/[0.05] flex flex-col justify-between h-14 lg:h-32 w-24 md:w-auto transition-all",
+                item.bg
+              )}>
+                <div className="flex justify-between items-start">
+                  <item.icon size={8} className={cn("opacity-40", item.color)} />
+                  <span className={cn("text-[7px] font-black uppercase", item.color)}>{item.label}</span>
+                </div>
+                <h4 className={cn("text-xs lg:text-3xl font-black tracking-tighter leading-none", item.color)}>{item.value}</h4>
               </div>
-              <h4 className={cn("text-3xl font-black tracking-tighter", item.color)}>{item.value}</h4>
-            </div>
-          ))}
-        </motion.section>
+            ))}
+          </motion.section>
+        </div>
 
         {/* Section-wise Grid View */}
         <AnimatePresence mode="wait">
-          {viewMode === 'tables' ? (
-            <div className="space-y-16">
+          {viewMode === 'list' ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="space-y-3"
+            >
+              {filteredReservations.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-white/10 gap-4">
+                  <Search size={48} strokeWidth={1} />
+                  <p className="text-[10px] font-black uppercase tracking-widest">No matching reservations</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredReservations.map((res) => (
+                    <motion.div
+                      key={res.id}
+                      onClick={() => setDetailsModalReservation(res)}
+                      className={cn(
+                        "p-4 rounded-2xl border bg-white/[0.02] border-white/5 hover:border-white/20 transition-all cursor-pointer flex justify-between items-center",
+                        res.status === 'VIP' ? "border-purple-500/20 bg-purple-500/[0.02]" :
+                        res.status === 'occupied' ? "border-orange-500/20 bg-orange-500/[0.02]" :
+                        "border-red-500/20 bg-red-500/[0.02]"
+                      )}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center",
+                          res.status === 'VIP' ? "bg-purple-500/20 text-purple-500" :
+                          res.status === 'occupied' ? "bg-orange-500/20 text-orange-500" :
+                          "bg-red-500/20 text-red-500"
+                        )}>
+                          <User size={18} />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold">{res.guestName}</h4>
+                          <p className="text-[9px] text-white/40 uppercase tracking-widest font-black">
+                            {res.date} • {res.time} • {res.guests} PAX
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">
+                          {res.reservationType === 'section' ? 'ZONE LOCK' : `T-${res.tableNumber || res.tables?.[0]}`}
+                        </span>
+                        <ChevronRight size={14} className="text-white/20" />
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          ) : viewMode === 'tables' ? (
+            <div className="space-y-6 lg:space-y-16">
               {sectionsData.map((section) => (
                 <motion.div 
                   key={section.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-6"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="space-y-3 lg:space-y-6"
                 >
-                  <div className="flex items-end justify-between px-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-2xl font-black tracking-tighter uppercase">{section.name}</h3>
+                  <div className="flex items-end justify-between px-1">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm lg:text-2xl font-black tracking-tighter uppercase">{section.name}</h3>
                         {section.reservation && (
-                          <div className="bg-red-500/20 text-red-500 px-3 py-1 rounded-full border border-red-500/30 flex items-center gap-2">
-                            <Lock size={12} fill="currentColor" />
-                            <span className="text-[10px] font-black uppercase tracking-widest">Zone Locked</span>
+                          <div className="bg-red-500/20 text-red-500 px-1.5 py-0.5 rounded-full border border-red-500/30 flex items-center gap-1">
+                            <Lock size={8} fill="currentColor" />
+                            <span className="text-[7px] font-black uppercase tracking-widest">Locked</span>
                           </div>
                         )}
                       </div>
-                      <p className="text-[10px] text-white/20 font-bold uppercase tracking-[0.2em]">{section.description}</p>
                     </div>
-                    <div className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">
-                      {section.reservedCount} / {section.totalTables} Capacity
+                    <div className="text-[8px] font-bold text-white/10 uppercase tracking-widest">
+                      {section.reservedCount}/{section.totalTables} TABLES
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 lg:gap-4">
                     {section.tables.map(({ number, reservation, isSectionReserved }) => (
                       <motion.div
                         key={`table-${number}`}
-                        whileHover={{ y: -8 }}
+                        whileHover={{ scale: 0.98 }}
                         onClick={() => {
                           if (reservation) {
                             setDetailsModalReservation(reservation);
@@ -371,86 +491,37 @@ export default function DashboardScreen() {
                           }
                         }}
                         className={cn(
-                          "group relative p-8 rounded-[2.5rem] border transition-all duration-500 cursor-pointer overflow-hidden min-h-[280px]",
+                          "group relative p-2 lg:p-6 rounded-xl lg:rounded-[2rem] border transition-all duration-300 cursor-pointer overflow-hidden min-h-[70px] lg:min-h-[180px] flex flex-col justify-between",
                           reservation 
-                            ? (reservation.status === 'VIP' ? "bg-purple-500/[0.03] border-purple-500/20 hover:border-purple-500/40 shadow-[0_15px_40px_rgba(168,85,247,0.1)]" :
-                               reservation.status === 'occupied' ? "bg-orange-500/[0.03] border-orange-500/20 hover:border-orange-500/40 shadow-[0_15px_40px_rgba(249,115,22,0.1)]" :
-                               "bg-white/[0.02] border-white/5 hover:border-red-500/40")
-                            : "bg-emerald-500/[0.02] border-dashed border-emerald-500/10 hover:border-emerald-500/40 hover:bg-emerald-500/[0.04]"
+                            ? (reservation.status === 'VIP' ? "bg-purple-500/[0.05] border-purple-500/30 shadow-[0_5px_15px_rgba(168,85,247,0.1)]" :
+                               reservation.status === 'occupied' ? "bg-orange-500/[0.05] border-orange-500/30 shadow-[0_5px_15px_rgba(249,115,22,0.1)]" :
+                               "bg-red-500/[0.05] border-red-500/30")
+                            : "bg-white/[0.02] border-white/5 hover:border-emerald-500/40"
                         )}
                       >
-                        <div className="flex justify-between items-start mb-10">
-                          <div className="space-y-1">
-                            <h4 className="text-3xl font-black tracking-tighter">Table {number}</h4>
-                          </div>
-                          {reservation ? (
+                        <div className="flex justify-between items-start">
+                          <h4 className="text-base lg:text-3xl font-black tracking-tighter">T{number}</h4>
+                          {reservation && (
                             <div className={cn(
-                              "flex items-center gap-2 px-3 py-1.5 rounded-full border",
-                              reservation.status === 'VIP' ? "bg-purple-500/10 text-purple-500 border-purple-500/20" :
-                              reservation.status === 'occupied' ? "bg-orange-500/10 text-orange-500 border-orange-500/20" :
-                              isSectionReserved ? "bg-red-500/10 text-red-500 border-red-500/20 outline outline-1 outline-red-500/20" : 
-                              "bg-red-500/10 text-red-500 border-red-500/20"
-                            )}>
-                              <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", 
-                                reservation.status === 'VIP' ? "bg-purple-500" :
-                                reservation.status === 'occupied' ? "bg-orange-500" :
-                                "bg-red-500")} />
-                              <span className="text-[10px] font-bold uppercase tracking-widest">
-                                {reservation.status === 'VIP' ? 'VIP' : 
-                                 reservation.status === 'occupied' ? 'Occupied' :
-                                 isSectionReserved ? 'Section Reserved' : 'Reserved'}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/40 group-hover:text-emerald-500 transition-colors">
-                              Available
-                            </div>
+                              "w-1.5 h-1.5 rounded-full",
+                              reservation.status === 'VIP' ? "bg-purple-500 shadow-[0_0_8px_#A855F7]" :
+                              reservation.status === 'occupied' ? "bg-orange-500 shadow-[0_0_8px_#F97316]" :
+                              "bg-red-500 shadow-[0_0_8px_#EF4444]"
+                            )} />
                           )}
                         </div>
 
                         {reservation ? (
-                          <div className="space-y-5">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40">
-                                <User size={18} />
-                              </div>
-                              <div>
-                                <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest underline decoration-white/10 underline-offset-4">Host Guest</p>
-                                <p className="text-sm font-bold truncate">{reservation.guestName}</p>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4 pt-2">
-                              <div className="bg-white/[0.03] p-3 rounded-2xl border border-white/5">
-                                <p className="text-[9px] text-white/20 font-bold uppercase tracking-widest mb-1">Guests</p>
-                                <div className="flex items-center gap-2">
-                                  <Users size={14} className="text-white/40" />
-                                  <span className="text-xs font-bold">{reservation.guests}</span>
-                                </div>
-                              </div>
-                              <div className="bg-white/[0.03] p-3 rounded-2xl border border-white/5">
-                                <p className="text-[9px] text-white/20 font-bold uppercase tracking-widest mb-1">Arrival</p>
-                                <div className="flex items-center gap-2">
-                                  <Clock size={14} className="text-white/40" />
-                                  <span className="text-xs font-bold">{reservation.time}</span>
-                                </div>
-                              </div>
+                          <div className="space-y-1 mt-2">
+                            <p className="text-[8px] font-bold truncate leading-none text-white/80">{reservation.guestName.split(' ')[0]}</p>
+                            <div className="flex items-center gap-1 opacity-40">
+                              <Users size={8} />
+                              <span className="text-[8px] font-black">{reservation.guests}</span>
                             </div>
                           </div>
                         ) : (
-                          <div className="h-32 flex flex-col items-center justify-center gap-4 text-white/10 group-hover:text-emerald-500/40 transition-all">
-                            <div className="w-14 h-14 rounded-full border-2 border-dashed border-current flex items-center justify-center">
-                              <Plus size={28} />
-                            </div>
-                            <span className="text-[11px] font-bold uppercase tracking-[0.3em]">Quick Book</span>
-                          </div>
+                          <Plus size={12} className="text-white/10 group-hover:text-emerald-500/40 self-end" />
                         )}
-                        
-                        <div className={cn(
-                          "absolute -bottom-10 -right-10 w-24 h-24 blur-[60px] opacity-20 transition-all duration-700",
-                          reservation?.status === 'VIP' ? "bg-purple-500" :
-                          reservation?.status === 'occupied' ? "bg-orange-500" :
-                          reservation ? "bg-red-500" : "bg-emerald-500 group-hover:opacity-40"
-                        )} />
                       </motion.div>
                     ))}
                   </div>
@@ -458,12 +529,12 @@ export default function DashboardScreen() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {sectionsData.map((section) => (
                 <motion.div
                   key={`section-view-${section.id}`}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   onClick={() => {
                     if (section.reservation) {
                       setDetailsModalReservation(section.reservation);
@@ -478,82 +549,37 @@ export default function DashboardScreen() {
                       setIsModalOpen(true);
                     }
                   }}
-                  whileHover={{ y: -10 }}
                   className={cn(
-                    "group relative p-10 rounded-[3rem] border transition-all duration-700 cursor-pointer overflow-hidden min-h-[400px] flex flex-col justify-between",
+                    "group relative p-4 lg:p-10 rounded-2xl lg:rounded-[3rem] border transition-all duration-700 cursor-pointer overflow-hidden min-h-[140px] lg:min-h-[300px] flex flex-col justify-between",
                     section.reservation 
-                      ? "bg-red-500/[0.03] border-red-500/20 shadow-[0_30px_60px_rgba(239,68,68,0.15)]" 
+                      ? "bg-red-500/[0.03] border-red-500/20 shadow-[0_10px_30px_rgba(239,68,68,0.1)]" 
                       : "bg-white/[0.02] border-white/5 hover:border-emerald-500/30"
                   )}
                 >
-                  <div className="space-y-6">
+                  <div className="space-y-2">
                     <div className="flex justify-between items-start">
-                      <div className="space-y-2">
-                        <span className="text-white/20 text-[11px] font-black uppercase tracking-[0.3em]">{section.description}</span>
-                        <h4 className="text-5xl font-black tracking-tighter uppercase leading-none">{section.name}</h4>
+                      <div className="space-y-0.5">
+                        <span className="text-white/20 text-[7px] lg:text-[11px] font-black uppercase tracking-widest">{section.description}</span>
+                        <h4 className="text-xl lg:text-5xl font-black tracking-tighter uppercase leading-none">{section.name}</h4>
                       </div>
                       {section.reservation ? (
-                        <div className="bg-red-500 p-3 rounded-full shadow-[0_0_20px_rgba(239,68,68,0.5)]">
-                          <Lock size={20} className="text-white" />
-                        </div>
+                        <Lock size={14} className="text-red-500" />
                       ) : (
-                        <div className="w-4 h-4 rounded-full bg-emerald-500 shadow-[0_0_15px_#10B981]" />
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10B981]" />
                       )}
                     </div>
-
-                    {section.reservation ? (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-red-500 text-[10px] font-black uppercase tracking-[0.3em] bg-red-500/10 w-fit px-3 py-1 rounded-full border border-red-500/20">Fully Reserved</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-3">
-                        <div className="flex -space-x-3">
-                          {section.tables.slice(0, 4).map(t => (
-                            <div key={t.number} className="w-10 h-10 rounded-full bg-emerald-500/10 border-2 border-[#050505] flex items-center justify-center text-emerald-500 text-[10px] font-black">
-                              {t.number}
-                            </div>
-                          ))}
-                          {section.totalTables > 4 && (
-                            <div className="w-10 h-10 rounded-full bg-white/5 border-2 border-[#050505] flex items-center justify-center text-white/40 text-[10px] font-black">
-                              +{section.totalTables - 4}
-                            </div>
-                          )}
-                        </div>
-                        <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{section.totalTables} TABLES READY</span>
-                      </div>
-                    )}
                   </div>
 
-                  {section.reservation ? (
-                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                      <div className="space-y-2">
-                        <p className="text-[10px] text-white/20 font-black uppercase tracking-[0.3em]">Reservation Holder</p>
-                        <p className="text-3xl font-black tracking-tight">{section.reservation.guestName}</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="bg-white/5 rounded-3xl p-5 border border-white/5">
-                          <p className="text-[9px] text-white/20 font-black uppercase mb-1">Session</p>
-                          <p className="text-sm font-bold">{section.reservation.time}</p>
-                        </div>
-                        <div className="bg-white/5 rounded-3xl p-5 border border-white/5">
-                          <p className="text-[9px] text-white/20 font-black uppercase mb-1">Guests</p>
-                          <p className="text-sm font-bold">{section.reservation.guests} PAX</p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      <p className="text-white/40 text-sm leading-relaxed font-medium">This zone spans tables {section.tables[0].number} to {section.tables[section.tables.length-1].number}. Ideal for large private gatherings and events.</p>
-                      <button className="w-full py-5 bg-white text-black rounded-3xl font-black text-xs uppercase tracking-[0.3em] hover:bg-emerald-400 transition-colors">
-                        Reserve Sector
-                      </button>
-                    </div>
-                  )}
-
-                  <div className={cn(
-                    "absolute -bottom-32 -right-32 w-80 h-80 blur-[120px] opacity-20 transition-all duration-1000",
-                    section.reservation ? "bg-red-600 opacity-40 shadow-[inset_0_0_100px_rgba(239,68,68,0.5)]" : "bg-emerald-600 group-hover:opacity-30"
-                  )} />
+                  <div className="flex justify-between items-end">
+                    <span className="text-[8px] lg:text-xs font-bold text-white/20 uppercase tracking-widest">
+                      {section.reservedCount}/{section.totalTables} TABLES
+                    </span>
+                    {section.reservation ? (
+                      <span className="text-[8px] font-black text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">LOCKED</span>
+                    ) : (
+                      <button className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Reserve Zone</button>
+                    )}
+                  </div>
                 </motion.div>
               ))}
             </div>
