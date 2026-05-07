@@ -119,7 +119,7 @@ const DashboardView = () => {
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-[#121215] border border-white/5 p-10 rounded-[3rem] space-y-8">
+          <div className="lg:col-span-2 bg-[#121215] border border-white/5 p-10 rounded-[3rem] space-y-8 min-w-0">
             <div className="flex justify-between items-end">
               <div>
                 <h3 className="text-2xl font-black text-white tracking-tighter uppercase">Revenue Velocity</h3>
@@ -130,8 +130,8 @@ const DashboardView = () => {
                  <button className="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase text-white/20 hover:text-white/40">Static</button>
               </div>
             </div>
-            <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[300px] w-full min-h-[300px] relative">
+              <ResponsiveContainer width="99%" height="100%">
                 <AreaChart data={data}>
                   <defs>
                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">

@@ -5,6 +5,7 @@ import { db, storage } from '../../lib/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Button } from '../../components/ui/button';
+import { cn } from '../../lib/utils';
 
 const OutletManagement = () => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -14,6 +15,7 @@ const OutletManagement = () => {
   const [success, setSuccess] = useState(false);
   const [outlet, setOutlet] = useState<any>({
     name: 'Everest Fine Dine',
+    subtitle: 'Management Suite',
     logo: '',
     phone: '+91 98765 43210',
     email: 'info@everestdines.com',
@@ -42,23 +44,97 @@ const OutletManagement = () => {
     fetchOutlet();
   }, []);
 
+  const compressImage = (file: File): Promise<Blob | File> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Max dimensions for a logo
+          const MAX_SIZE = 800;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              resolve(file);
+            }
+          }, 'image/png', 0.8);
+        };
+      };
+      reader.onerror = () => resolve(file);
+    });
+  };
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
     try {
-      const storageRef = ref(storage, `outlets/logos/${Date.now()}-${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      let logoUrl = '';
+      let processedFile: Blob | File = file;
+
+      // Compress if it's an image
+      if (file.type.startsWith('image/')) {
+        processedFile = await compressImage(file);
+      }
       
-      setOutlet(prev => ({ ...prev, logo: downloadURL }));
+      try {
+        if (!storage) throw new Error("Storage not initialized");
+        
+        const storageRef = ref(storage, `outlets/logos/${Date.now()}-${file.name}`);
+        const snapshot = await uploadBytes(storageRef, processedFile);
+        logoUrl = await getDownloadURL(snapshot.ref);
+      } catch (storageError: any) {
+        console.warn("Storage upload failed, falling back to Base64:", storageError);
+        
+        if (processedFile.size > 900000) { 
+          throw new Error("File is too large for database storage. Please use a smaller file under 900KB.");
+        }
+        
+        logoUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(processedFile);
+        });
+      }
       
-      // Also update the document immediately if possible, or just leave it for handleSave
-      // I'll leave it for handleSave to keep it consistent
-    } catch (error) {
+      setOutlet(prev => ({ ...prev, logo: logoUrl }));
+      
+      await setDoc(doc(db, 'outlets', 'main-outlet'), {
+        logo: logoUrl,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (error: any) {
       console.error("Error uploading logo:", error);
-      alert("Failed to upload logo. Please try again.");
+      alert(`Failed to upload logo: ${error.message || 'Unknown error'}`);
     } finally {
       setUploading(false);
     }
@@ -118,18 +194,33 @@ const OutletManagement = () => {
                   type="file" 
                   ref={fileInputRef}
                   onChange={handleLogoUpload}
-                  accept="image/*"
+                  accept="image/*,application/pdf"
                   className="hidden"
                 />
-                <div className="w-full h-full rounded-3xl bg-white/[0.05] border-2 border-dashed border-white/10 flex flex-col items-center justify-center transition-all group-hover:border-amber-500/40 overflow-hidden">
+                <div 
+                  onClick={() => !uploading && fileInputRef.current?.click()}
+                  className={cn(
+                    "w-full h-full rounded-3xl bg-white/[0.05] border-2 border-dashed border-white/10 flex flex-col items-center justify-center transition-all overflow-hidden cursor-pointer",
+                    !uploading && "hover:border-amber-500/40 hover:bg-white/[0.07]"
+                  )}
+                >
                   {uploading ? (
                     <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
                   ) : outlet.logo ? (
-                    <img src={outlet.logo} alt="Logo" className="w-full h-full object-contain p-2" />
+                    outlet.logo.startsWith('data:application/pdf') || outlet.logo.includes('.pdf') ? (
+                       <div className="flex flex-col items-center gap-2">
+                         <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center text-red-500">
+                           <Save size={24} />
+                         </div>
+                         <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">PDF Logo</span>
+                       </div>
+                    ) : (
+                      <img src={outlet.logo} alt="Logo" className="w-full h-full object-contain p-2" />
+                    )
                   ) : (
                     <>
                       <Store size={32} className="text-white/20 mb-2" />
-                      <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Logo</span>
+                      <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Upload Logo</span>
                     </>
                   )}
                 </div>
@@ -143,7 +234,7 @@ const OutletManagement = () => {
               </div>
               <div className="space-y-1">
                 <h3 className="text-xl font-bold tracking-tight text-white">{outlet.name}</h3>
-                <p className="text-xs text-white/40">Primary Location</p>
+                <p className="text-xs text-white/40">{outlet.subtitle || 'Management Suite'}</p>
               </div>
               <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-amber-500 blur-[80px] opacity-10 group-hover:opacity-20 transition-opacity" />
             </div>
@@ -160,6 +251,19 @@ const OutletManagement = () => {
                     type="text" 
                     value={outlet.name}
                     onChange={(e) => setOutlet({...outlet, name: e.target.value})}
+                    className={`${inputClasses} pl-11`} 
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className={labelClasses}>Management Title (Subtitle)</label>
+                <div className="relative">
+                  <Globe size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
+                  <input 
+                    type="text" 
+                    value={outlet.subtitle || ''}
+                    onChange={(e) => setOutlet({...outlet, subtitle: e.target.value})}
+                    placeholder="e.target.value || 'Management Suite'"
                     className={`${inputClasses} pl-11`} 
                   />
                 </div>

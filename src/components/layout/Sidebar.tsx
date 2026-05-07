@@ -23,6 +23,7 @@ import {
   Users
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useOutlet } from '../../contexts/OutletContext';
 import { cn } from '../../lib/utils';
 
 export type NavItem = 
@@ -47,6 +48,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, setIsCollapsed }) => {
   const { userData, logout } = useAuth();
+  const { outlet } = useOutlet();
 
   const menuGroups = [
     {
@@ -85,9 +87,21 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, 
     >
       {/* Brand Header */}
       <div className="p-6 mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-black shadow-[0_0_20px_rgba(251,191,36,0.3)]">
-            <Zap size={22} fill="currentColor" />
+        <button 
+          onClick={() => onNavigate('outlet')}
+          className="flex items-center gap-3 hover:opacity-80 transition-opacity text-left outline-none group"
+        >
+          <div className={cn(
+            "w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0 transition-all",
+            outlet?.logo 
+              ? "bg-transparent" 
+              : "bg-gradient-to-br from-amber-400 to-amber-600 text-black shadow-[0_0_20px_rgba(251,191,36,0.3)]"
+          )}>
+            {outlet?.logo ? (
+              <img src={outlet.logo} alt="Outlet logo" className="w-full h-full object-contain p-1" />
+            ) : (
+              <Zap size={22} fill="currentColor" />
+            )}
           </div>
           <AnimatePresence>
             {!isCollapsed && (
@@ -97,12 +111,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, 
                 exit={{ opacity: 0, x: -10 }}
                 className="overflow-hidden whitespace-nowrap"
               >
-                <h1 className="text-lg font-black tracking-tighter text-white">RESERVE LUXE</h1>
-                <p className="text-[8px] font-bold tracking-[0.3em] text-amber-500/60 uppercase">Management Suite</p>
+                <h1 className="text-lg font-black tracking-tighter text-white uppercase truncate max-w-[160px]">
+                  {outlet?.name || "RESERVE LUXE"}
+                </h1>
+                <p className="text-[8px] font-bold tracking-[0.3em] text-amber-500/60 uppercase">
+                  {outlet?.subtitle || "Management Suite"}
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </button>
       </div>
 
       {/* Navigation */}
