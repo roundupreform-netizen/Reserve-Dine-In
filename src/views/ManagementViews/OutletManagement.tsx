@@ -1,24 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { 
-  Store, 
-  Upload, 
-  MapPin, 
-  Phone, 
-  Mail, 
-  Clock, 
-  Hash, 
-  Globe,
-  Save,
-  CheckCircle2
-} from 'lucide-react';
-import { db } from '../../lib/firebase';
+import { Store, Upload, MapPin, Phone, Mail, Clock, Hash, Globe, Save, CheckCircle2, Loader2 } from 'lucide-react';
+import { db, storage } from '../../lib/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Button } from '../../components/ui/button';
 
 const OutletManagement = () => {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [outlet, setOutlet] = useState<any>({
     name: 'Everest Fine Dine',
@@ -49,6 +41,28 @@ const OutletManagement = () => {
     };
     fetchOutlet();
   }, []);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const storageRef = ref(storage, `outlets/logos/${Date.now()}-${file.name}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      setOutlet(prev => ({ ...prev, logo: downloadURL }));
+      
+      // Also update the document immediately if possible, or just leave it for handleSave
+      // I'll leave it for handleSave to keep it consistent
+    } catch (error) {
+      console.error("Error uploading logo:", error);
+      alert("Failed to upload logo. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -100,9 +114,18 @@ const OutletManagement = () => {
             <div className="bg-white/[0.03] border border-white/5 rounded-[2.5rem] p-8 text-center space-y-6 relative overflow-hidden group">
               <label className={labelClasses}>Outlet Branding</label>
               <div className="relative w-32 h-32 mx-auto">
-                <div className="w-full h-full rounded-3xl bg-white/[0.05] border-2 border-dashed border-white/10 flex flex-col items-center justify-center transition-all group-hover:border-amber-500/40">
-                  {outlet.logo ? (
-                    <img src={outlet.logo} alt="Logo" className="w-full h-full object-contain p-4" />
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  onChange={handleLogoUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <div className="w-full h-full rounded-3xl bg-white/[0.05] border-2 border-dashed border-white/10 flex flex-col items-center justify-center transition-all group-hover:border-amber-500/40 overflow-hidden">
+                  {uploading ? (
+                    <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                  ) : outlet.logo ? (
+                    <img src={outlet.logo} alt="Logo" className="w-full h-full object-contain p-2" />
                   ) : (
                     <>
                       <Store size={32} className="text-white/20 mb-2" />
@@ -110,7 +133,11 @@ const OutletManagement = () => {
                     </>
                   )}
                 </div>
-                <button className="absolute -bottom-2 -right-2 w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-black shadow-xl hover:scale-110 transition-transform">
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="absolute -bottom-2 -right-2 w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-black shadow-xl hover:scale-110 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+                >
                   <Upload size={18} />
                 </button>
               </div>
