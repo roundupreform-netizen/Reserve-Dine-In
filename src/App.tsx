@@ -10,11 +10,13 @@ import MenuManagement from './views/ManagementViews/MenuManagement';
 import OutletManagement from './views/ManagementViews/OutletManagement';
 import { PreOrdersView, HighTeaView, ReportsView } from './views/PlaceholderViews';
 import { AnimatePresence, motion } from 'motion/react';
+import NewReservationModal from './components/modals/NewReservationModal';
 
 function App() {
   const { user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<NavItem>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isNewReservationModalOpen, setIsNewReservationModalOpen] = useState(false);
 
   if (loading) {
     return (
@@ -31,9 +33,11 @@ function App() {
   if (!user) return <AuthScreen />;
 
   const renderContent = () => {
+    const props = { onNewReservation: () => setIsNewReservationModalOpen(true) };
+    
     switch (activeTab) {
-      case 'dashboard': return <DashboardView />;
-      case 'reservations': return <ReservationsView />;
+      case 'dashboard': return <DashboardView onNavigate={(tab) => setActiveTab(tab)} {...props} />;
+      case 'reservations': return <ReservationsView {...props} />;
       case 'calendar': return <CalendarView />;
       case 'tables': return <TableManagement />;
       case 'dineInMenu': return <MenuManagement />;
@@ -42,7 +46,7 @@ function App() {
       case 'preorders': return <PreOrdersView />;
       case 'hightea': return <HighTeaView />;
       case 'reports': return <ReportsView />;
-      default: return <DashboardView />;
+      default: return <DashboardView {...props} />;
     }
   };
 
@@ -73,6 +77,11 @@ function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <NewReservationModal 
+        isOpen={isNewReservationModalOpen} 
+        onClose={() => setIsNewReservationModalOpen(false)} 
+      />
     </div>
   );
 }

@@ -17,7 +17,7 @@ import { collection, query, onSnapshot, doc, updateDoc, deleteDoc } from 'fireba
 import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
 
-const ReservationsView = () => {
+const ReservationsView = ({ onNewReservation }: { onNewReservation?: () => void }) => {
   const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -36,6 +36,7 @@ const ReservationsView = () => {
     switch (status) {
       case 'confirmed': return 'text-green-500 bg-green-500/10 border-green-500/20';
       case 'pending': return 'text-orange-500 bg-orange-500/10 border-orange-500/20';
+      case 'occupied': return 'text-amber-500 bg-amber-500/10 border-amber-500/20';
       case 'VIP': return 'text-purple-500 bg-purple-500/10 border-purple-500/20';
       case 'seated': return 'text-blue-500 bg-blue-500/10 border-blue-500/20';
       case 'completed': return 'text-white/40 bg-white/5 border-white/10';
@@ -68,7 +69,10 @@ const ReservationsView = () => {
                 className="w-full h-12 bg-white/[0.03] border border-white/5 rounded-xl pl-11 pr-4 text-sm focus:border-amber-500/30 outline-none text-white transition-all"
               />
             </div>
-            <Button className="h-12 bg-amber-500 hover:bg-amber-600 text-black font-black uppercase tracking-widest px-8 rounded-xl shadow-lg">
+            <Button 
+              onClick={() => onNewReservation?.()}
+              className="h-12 bg-amber-500 hover:bg-amber-600 text-black font-black uppercase tracking-widest px-8 rounded-xl shadow-lg"
+            >
               <Plus size={18} className="mr-2" />
               New Booking
             </Button>
@@ -140,7 +144,7 @@ const ReservationsView = () => {
                           {res.guests} PAX
                         </div>
                         <p className="text-[10px] text-white/20 font-black uppercase tracking-widest">
-                          {res.tableId ? `Table ${res.tableId}` : 'No Table Assigned'}
+                          {res.reservationType === 'section' ? `Section: ${res.sectionId}` : res.selectedTables?.length > 0 ? `Tables: ${res.selectedTables.join(', ')}` : 'No Tables'}
                         </p>
                       </div>
                     </td>
