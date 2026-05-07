@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { GlassCard, Button } from '../components/ui/core';
 
 export default function AuthScreen() {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, error } = useAuth();
 
   return (
     <div className="min-h-screen bg-[#0A0A0C] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_20%_20%,_rgba(16,185,129,0.15)_0%,_transparent_40%),_radial-gradient(circle_at_80%_80%,_rgba(59,130,246,0.1)_0%,_transparent_40%)]">
@@ -31,6 +31,17 @@ export default function AuthScreen() {
         <GlassCard className="text-center p-10 relative overflow-hidden rounded-[2.5rem] border-white/[0.05]">
           <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-emerald-500 to-emerald-300 opacity-50" />
           <h2 className="text-xl font-bold mb-8 text-white tracking-tight">Modern Restaurant Management</h2>
+          
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-semibold"
+            >
+              {error}
+            </motion.div>
+          )}
+
           <div className="space-y-6">
             <Button 
               className="w-full h-16 bg-white text-black hover:bg-gray-100 shadow-[0_15px_35px_rgba(255,255,255,0.1)] border-none rounded-[1.25rem]"

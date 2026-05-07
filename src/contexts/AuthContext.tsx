@@ -13,21 +13,35 @@ interface AuthContextType {
   user: User | null;
   userData: any | null;
   loading: boolean;
+  error: string | null;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const AUTHORIZED_EMAIL = 'roundupreform@gmail.com';
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
+      setError(null);
       if (user) {
+        if (user.email !== AUTHORIZED_EMAIL) {
+          setError('Unauthorized access: This app is restricted to authorized developers only.');
+          await signOut(auth);
+          setUser(null);
+          setUserData(null);
+          setLoading(false);
+          return;
+        }
+
+        setUser(user);
         // Fetch or create user record in Firestore
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
@@ -37,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             uid: user.uid,
             email: user.email,
             displayName: user.displayName,
-            role: user.email === 'roundupreform@gmail.com' ? 'admin' : 'customer', // Developer is admin
+            role: 'admin', // Since it's restricted to ADMIN_EMAIL, all logins are admin
             createdAt: serverTimestamp(),
           };
           await setDoc(userRef, newUserData);
@@ -46,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserData(userSnap.data());
         }
       } else {
+        setUser(null);
         setUserData(null);
       }
       setLoading(false);
@@ -56,17 +71,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
+    setError(null);
     try {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error('Login Error:', error);
+      setError('Failed to sign in. Please try again.');
     }
   };
 
   const logout = () => signOut(auth);
 
   return (
-    <AuthContext.Provider value={{ user, userData, loading, signInWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, userData, loading, error, signInWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );
