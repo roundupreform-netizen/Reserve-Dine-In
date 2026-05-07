@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Reservation": {
+      "title": "Reservation",
+      "description": "Restaurant reservation details",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "guests": { "type": "integer" },
+        "specialRequest": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled", "completed"] },
+        "tableId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "date", "time", "guests", "status"]
+    },
+    "Revenue": {
+      "title": "Revenue",
+      "description": "Daily revenue analytics",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "amount": { "type": "number" },
+        "reservationCount": { "type": "integer" }
+      },
+      "required": ["date", "amount"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Collection of users"
+    },
+    "reservations/{reservationId}": {
+      "schema": "Reservation",
+      "description": "Collection of all reservations"
+    },
+    "revenue/{revenueId}": {
+      "schema": "Revenue",
+      "description": "Collection of daily revenue stats"
+    }
+  }
+}

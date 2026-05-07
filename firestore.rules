@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
+             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity validations
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid == request.auth.uid &&
+             data.role in ['customer', 'admin'] &&
+             data.email is string &&
+             data.email.size() > 0;
+    }
+
+    function isValidReservation(data) {
+      return data.keys().hasAll(['userId', 'date', 'time', 'guests', 'status']) &&
+             data.userId == request.auth.uid &&
+             data.guests is int && data.guests > 0 &&
+             data.status in ['pending', 'confirmed', 'cancelled', 'completed'] &&
+             data.date is string &&
+             data.time is string;
+    }
+
+    // Match blocks
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'email']) && isValidUser(request.resource.data);
+    }
+
+    match /reservations/{reservationId} {
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(reservationId) && isValidReservation(request.resource.data);
+      allow update: if isSignedIn() && (
+        (isOwner(resource.data.userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'specialRequest', 'guests', 'date', 'time'])) ||
+        isAdmin()
+      ) && isValidReservation(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /revenue/{revenueId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
