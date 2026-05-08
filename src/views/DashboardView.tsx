@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   TrendingUp, 
   Users, 
   Clock, 
   ArrowUpRight, 
-  ArrowDownRight,
   Calendar,
   CheckCircle2,
   Zap,
@@ -16,318 +15,708 @@ import {
   Coffee,
   ShoppingBag,
   Truck,
-  GripVertical
+  GripVertical,
+  ChevronRight,
+  Crown,
+  Cake,
+  UserPlus,
+  Timer,
+  AlertCircle,
+  MapPin,
+  CreditCard,
+  PieChart as PieIcon,
+  Search
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
-import { collection, query, onSnapshot, getDocs, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
 import { 
-  BarChart, 
-  Bar, 
+  AreaChart, 
+  Area, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  AreaChart,
-  Area
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
+
+// --- Types ---
+interface Reservation {
+  id: string;
+  guestName: string;
+  phone: string;
+  guests: number;
+  date: string;
+  time: string;
+  session: string;
+  status: 'pending' | 'confirmed' | 'seated' | 'cancelled' | 'completed' | 'VIP';
+  tableId?: string;
+  serviceType?: 'dine-in' | 'takeaway' | 'delivery' | 'high-tea';
+  preorderItems?: any[];
+  specialOccasion?: string;
+  isFrequent?: boolean;
+}
+
+// --- Helper Components ---
+
+const GlassCard = ({ children, className, onClick, gradient = false }: { children: React.ReactNode, className?: string, onClick?: () => void, gradient?: boolean }) => (
+  <motion.div
+    whileHover={{ y: -5, scale: 1.01 }}
+    onClick={onClick}
+    className={cn(
+      "relative p-8 rounded-[2.5rem] border border-white/5 backdrop-blur-xl overflow-hidden group transition-all duration-500 cursor-pointer",
+      gradient ? "bg-gradient-to-br from-emerald-500/10 to-transparent" : "bg-white/[0.02]",
+      className
+    )}
+  >
+    <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+    <div className="absolute -inset-px bg-gradient-to-r from-emerald-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-[2.5rem]" />
+    <div className="relative z-10">{children}</div>
+  </motion.div>
+);
+
+const LiveStatus = () => {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-4 bg-white/5 px-6 py-3 rounded-2xl border border-white/5 backdrop-blur-xl group">
+        <Calendar size={18} className="text-blue-500" />
+        <div className="flex flex-col">
+          <span className="text-xl font-black tabular-nums tracking-tighter text-white">
+            {now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
+          </span>
+          <span className="text-[10px] font-black uppercase tracking-widest text-blue-500/60 font-mono">Current Logic Date</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 bg-white/5 px-6 py-3 rounded-2xl border border-white/5 backdrop-blur-xl group">
+        <Timer size={18} className="text-emerald-500 animate-pulse" />
+        <div className="flex flex-col">
+          <span className="text-xl font-black tabular-nums tracking-tighter text-white">
+            {now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500/60 font-mono">Live Engine Time</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const Modal = ({ isOpen, onClose, title, children, icon: Icon }: any) => (
+  <AnimatePresence>
+    {isOpen && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
+        <motion.div 
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={onClose}
+          className="absolute inset-0 bg-black/80 backdrop-blur-md" 
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          className="relative w-full max-w-4xl bg-[#0F0F12] border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+        >
+          <div className="p-8 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-emerald-500/5 to-transparent">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-500">
+                <Icon size={24} />
+              </div>
+              <h2 className="text-2xl font-black tracking-tighter uppercase">{title}</h2>
+            </div>
+            <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white/5 flex items-center justify-center transition-colors">
+              <Plus size={24} className="rotate-45" />
+            </button>
+          </div>
+          <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
+            {children}
+          </div>
+        </motion.div>
+      </div>
+    )}
+  </AnimatePresence>
+);
+
+const CircularProgress = ({ value, label, sublabel }: any) => {
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (value / 100) * circumference;
+
+  return (
+    <div className="relative flex flex-col items-center justify-center p-6 bg-white/[0.02] border border-white/5 rounded-[2rem]">
+      <svg className="w-32 h-32 transform -rotate-90">
+        <circle cx="64" cy="64" r={radius} stroke="currentColor" strokeWidth="8" fill="transparent" className="text-white/5" />
+        <motion.circle 
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset }}
+          transition={{ duration: 1.5, ease: "easeOut" }}
+          cx="64" cy="64" r={radius} stroke="currentColor" strokeWidth="8" fill="transparent" 
+          strokeDasharray={circumference} className="text-emerald-500" strokeLinecap="round" 
+        />
+      </svg>
+      <div className="absolute top-[45px] flex flex-col items-center">
+        <span className="text-2xl font-black tracking-tighter">{value}%</span>
+      </div>
+      <div className="mt-4 text-center">
+        <p className="text-xs font-black uppercase tracking-widest text-white/80">{label}</p>
+        <p className="text-[10px] text-white/40 uppercase tracking-widest">{sublabel}</p>
+      </div>
+    </div>
+  );
+};
+
+// --- Main View ---
 
 const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: any) => void, onNewReservation?: () => void }) => {
   const { user, userData } = useAuth();
-  const [stats, setStats] = useState({
-    totalBookings: 0,
-    activeGuests: 0,
-    occupancyRate: 0,
-    dailyRevenue: 54200
-  });
+  const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [greeting, setGreeting] = useState('');
+  const [activeModal, setActiveModal] = useState<string | null>(null);
+  
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   useEffect(() => {
-    const updateGreeting = () => {
-      const hour = new Date().getHours();
-      if (hour < 12) setGreeting('Good Morning');
-      else if (hour < 17) setGreeting('Good Afternoon');
-      else setGreeting('Good Evening');
-    };
-    updateGreeting();
+    const unsub = onSnapshot(collection(db, 'reservations'), (snap) => {
+      setReservations(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reservation)));
+      setLoading(false);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'reservations'));
+    return unsub;
   }, []);
 
-  useEffect(() => {
-    if (!user || !userData) return;
-    setLoading(true);
+  const stats = useMemo(() => {
+    const today = reservations.filter(r => r.date === todayStr);
+    const preorders = today.filter(r => r.preorderItems && r.preorderItems.length > 0);
+    const takeaway = today.filter(r => r.serviceType === 'takeaway' || (!r.serviceType && r.session === 'Takeaway')); 
+    const delivery = today.filter(r => r.serviceType === 'delivery');
+    const highTea = today.filter(r => r.session === 'Snacks' || r.session === 'High Tea');
+    const occupancy = Math.min(100, Math.round(((today.filter(r => ['seated', 'confirmed'].includes(r.status)).length) / 24) * 100));
 
-    const unsubRes = onSnapshot(collection(db, 'reservations'), (snap) => {
-      const res = snap.docs.map(d => d.data());
-      const active = res.filter(r => r.status === 'seated').length;
-      setStats(prev => ({
-        ...prev,
-        totalBookings: res.length,
-        activeGuests: active,
-        occupancyRate: Math.round((active / 24) * 100) // Assuming 24 tables for demo
-      }));
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'reservations');
-    });
-    return unsubRes;
-  }, [user, userData]);
+    const sessions: Record<string, Reservation[]> = {
+      Breakfast: today.filter(r => r.session === 'Breakfast'),
+      Lunch: today.filter(r => r.session === 'Lunch'),
+      HighTea: today.filter(r => r.session === 'Snacks' || r.session === 'High Tea'),
+      Dinner: today.filter(r => r.session === 'Dinner'),
+      Evening: today.filter(r => r.session === 'Evening' || r.session === 'Snacks'),
+    };
 
-  const data = [
-    { name: '08 AM', count: 12, rev: 4500 },
-    { name: '10 AM', count: 18, rev: 8200 },
-    { name: '12 PM', count: 45, rev: 15600 },
-    { name: '02 PM', count: 32, rev: 12000 },
-    { name: '04 PM', count: 25, rev: 8900 },
-    { name: '06 PM', count: 52, rev: 22000 },
-    { name: '08 PM', count: 65, rev: 31000 },
-    { name: '10 PM', count: 38, rev: 14000 },
+    return { 
+      today, 
+      preorders, 
+      takeaway, 
+      delivery, 
+      highTea, 
+      occupancy,
+      sessions
+    };
+  }, [reservations, todayStr]);
+
+  const upcoming = useMemo(() => {
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayAfter = new Date(); dayAfter.setDate(dayAfter.getDate() + 2);
+    const tmoStr = tomorrow.toISOString().split('T')[0];
+    const datStr = dayAfter.toISOString().split('T')[0];
+    
+    return reservations
+      .filter(r => r.date === tmoStr || r.date === datStr)
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return a.time.localeCompare(b.time);
+      });
+  }, [reservations]);
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }, []);
+
+  const peakData = useMemo(() => {
+    const hours = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
+    return hours.map(h => ({
+      name: h,
+      bookings: stats.today.filter(r => r.time.startsWith(h.split(':')[0])).length,
+      guests: stats.today.filter(r => r.time.startsWith(h.split(':')[0])).reduce((acc, r) => acc + r.guests, 0)
+    }));
+  }, [stats.today]);
+
+  const sourceData = [
+    { name: 'Online', value: 45, color: '#10b981' },
+    { name: 'Walk-in', value: 25, color: '#3b82f6' },
+    { name: 'Phone', value: 20, color: '#f59e0b' },
+    { name: 'Hotel Guest', value: 10, color: '#8b5cf6' }
   ];
 
-  const mainStats = [
-    { label: 'Total Volume', value: stats.totalBookings, trend: '+18%', icon: TrendingUp, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { label: 'Live Seating', value: stats.activeGuests, trend: '+5%', icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { label: 'Occupancy', value: `${stats.occupancyRate}%`, trend: '-2%', icon: Activity, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-    { label: 'Gross Revenue', value: `₹${(stats.dailyRevenue / 1000).toFixed(1)}k`, trend: '+22%', icon: Star, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  ];
+  if (loading) return (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+    </div>
+  );
 
   return (
-    <div className="flex-1 p-6 lg:p-12 overflow-y-auto no-scrollbar relative min-h-screen">
-      {/* Floating Action Button for Mobile/Quick Access */}
-      <button 
-        onClick={() => onNewReservation?.()}
-        className="fixed bottom-8 right-8 w-16 h-16 bg-amber-500 rounded-full flex items-center justify-center text-black shadow-[0_10px_30px_rgba(245,158,11,0.4)] md:hidden z-50 transform active:scale-95 transition-all"
-      >
-        <Plus size={32} className="stroke-[3]" />
-      </button>
+    <div className="flex-1 p-6 lg:p-12 overflow-y-auto no-scrollbar relative min-h-screen bg-[#0A0A0C]">
+      {/* Background Decor */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500/5 blur-[150px] -z-10 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-500/5 blur-[150px] -z-10 pointer-events-none" />
 
       <div className="max-w-7xl mx-auto space-y-12">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-          <div className="space-y-1">
-            <h1 className="text-4xl font-black tracking-tighter text-white">
-              {greeting}, <span className="text-amber-500">{userData?.displayName?.split(' ')[0] || 'Partner'}</span>
-            </h1>
-            <p className="text-white/40 font-medium">Here's what's happening at your outlet today</p>
+        {/* Header */}
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+          <div className="space-y-2">
+            <motion.h1 
+              initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+              className="text-5xl font-black tracking-tighter text-white"
+            >
+              {greeting}, <span className="text-emerald-500">{userData?.displayName?.split(' ')[0] || 'Partner'}</span>
+            </motion.h1>
+            <p className="text-white/40 text-lg font-medium">Here's what's happening at your outlet today.</p>
           </div>
-          <div className="flex gap-4">
-             <button 
-                onClick={() => onNewReservation?.()}
-                className="bg-amber-500 hover:bg-amber-600 text-black px-6 py-3 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(245,158,11,0.3)] group"
-             >
-                <Plus size={20} className="stroke-[3]" />
-                <span className="text-xs font-black uppercase tracking-widest">New Reservation</span>
-             </button>
-             <div className="bg-white/5 px-6 py-3 rounded-2xl border border-white/5 flex items-center gap-3 backdrop-blur-sm hidden sm:flex">
-                <Calendar size={16} className="text-amber-500" />
-                <span className="text-xs font-black uppercase tracking-widest text-white/80">
-                  {new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
-                </span>
-             </div>
+          
+          <div className="flex flex-wrap items-center gap-4">
+            <LiveStatus />
+            <motion.button 
+              whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(16,185,129,0.4)" }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onNewReservation}
+              className="px-8 py-4 bg-emerald-500 text-black rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3 transition-all relative overflow-hidden group shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
+              <Plus size={20} className="stroke-[3] relative z-10" />
+              <span className="relative z-10">Add New Reservation</span>
+            </motion.button>
           </div>
         </header>
 
-        {/* Top Cards */}
+        {/* Overview Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {mainStats.map((stat, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="bg-[#121215] border border-white/5 p-8 rounded-[2.5rem] relative overflow-hidden group hover:border-white/10 transition-colors"
-            >
-              <div className="relative z-10 space-y-6">
-                <div className="flex justify-between items-start">
-                  <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center", stat.bg, stat.color)}>
-                    <stat.icon size={24} />
-                  </div>
-                  <span className={cn(
-                    "text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-widest",
-                    stat.trend.startsWith('+') ? "text-emerald-500 bg-emerald-500/10" : "text-red-500 bg-red-500/10"
-                  )}>
-                    {stat.trend}
-                  </span>
+          <GlassCard onClick={() => setActiveModal('reservations')}>
+            <div className="flex flex-col h-full justify-between gap-6">
+              <div className="flex justify-between items-start">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 ring-1 ring-emerald-500/20">
+                  <Activity size={28} />
                 </div>
-                <div>
-                  <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">{stat.label}</p>
-                  <h3 className="text-3xl font-black text-white tracking-tighter leading-none">{stat.value}</h3>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded-lg">Live</span>
+                  <span className="text-2xl font-black text-white mt-1">{stats.occupancy}%</span>
                 </div>
               </div>
-              <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white blur-[100px] opacity-0 group-hover:opacity-5 transition-opacity" />
-            </motion.div>
-          ))}
+              <div className="space-y-1">
+                <h3 className="text-3xl font-black tracking-tighter text-white">{stats.today.length}</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Total Reservations Today</p>
+                <div className="w-full h-1 bg-white/5 rounded-full mt-4 overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${stats.occupancy}%` }} className="h-full bg-emerald-500" />
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+
+          <GlassCard onClick={() => setActiveModal('preorders')}>
+            <div className="flex flex-col h-full justify-between gap-6">
+              <div className="flex justify-between items-start">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 ring-1 ring-amber-500/20">
+                  <ShoppingBag size={28} />
+                </div>
+                <div className="p-1 px-3 bg-white/5 rounded-full backdrop-blur-md">
+                   <p className="text-[10px] font-bold text-white/60">₹{(stats.preorders.length * 1250).toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-3xl font-black tracking-tighter text-white">{stats.preorders.length}</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Pre-Orders Today</p>
+                <div className="flex gap-1 mt-4">
+                  {['P', 'C', 'R'].map((s, i) => (
+                    <div key={i} className="flex-1 h-1 bg-white/5 rounded-full bg-amber-500/20" />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+
+          <GlassCard onClick={() => setActiveModal('takeaway')}>
+            <div className="flex flex-col h-full justify-between gap-6">
+              <div className="flex justify-between items-start">
+                <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 ring-1 ring-blue-500/20">
+                  <Utensils size={28} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-3xl font-black tracking-tighter text-white">{stats.takeaway.length}</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Takeaway Orders</p>
+                <div className="flex items-center gap-2 mt-4">
+                   <Clock size={12} className="text-blue-500" />
+                   <span className="text-[10px] font-bold text-white/40 uppercase">Next pickup in 12m</span>
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+
+          <GlassCard onClick={() => setActiveModal('delivery')}>
+            <div className="flex flex-col h-full justify-between gap-6">
+              <div className="flex justify-between items-start">
+                <div className="w-14 h-14 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500 ring-1 ring-purple-500/20">
+                  <Truck size={28} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-3xl font-black tracking-tighter text-white">{stats.delivery.length}</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Delivery Preorders</p>
+                <div className="flex items-center gap-2 mt-4">
+                   <Activity size={12} className="text-purple-500" />
+                   <span className="text-[10px] font-bold text-white/40 uppercase">3 Drivers Active</span>
+                </div>
+              </div>
+            </div>
+          </GlassCard>
         </div>
 
-        {/* Charts Section */}
+        {/* Analytics & High Tea */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
-            <div className="bg-[#121215] border border-white/5 p-10 rounded-[3rem] space-y-8 min-w-0">
+            {/* Peak Hours Chart */}
+            <div className="bg-white/[0.02] border border-white/5 p-10 rounded-[3rem] space-y-8">
               <div className="flex justify-between items-end">
                 <div>
-                  <h3 className="text-2xl font-black text-white tracking-tighter uppercase">Revenue Velocity</h3>
-                  <p className="text-xs text-white/40">Hourly earnings across all outlets</p>
+                  <h3 className="text-2xl font-black text-white tracking-tighter uppercase">Peak Demand Analytics</h3>
+                  <p className="text-xs text-white/40">Real-time hourly reservation tracking</p>
                 </div>
-                <div className="flex bg-white/5 p-1 rounded-xl">
-                   <button className="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase text-amber-500 bg-amber-500/10">Dynamic</button>
-                   <button className="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase text-white/20 hover:text-white/40">Static</button>
-                </div>
+                <PieIcon className="text-emerald-500 opacity-20" size={40} />
               </div>
-              <div className="h-[300px] w-full min-h-[300px] relative">
-                <ResponsiveContainer width="99%" height="100%">
-                  <AreaChart data={data}>
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={peakData}>
                     <defs>
-                      <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                      <linearGradient id="colorEmerald" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.02)" />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{fill: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: 900}} 
-                      dy={15}
-                    />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: 900}} dy={10} />
                     <YAxis hide />
-                    <Tooltip 
-                      contentStyle={{backgroundColor: '#121215', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '16px', color: '#fff'}}
-                      itemStyle={{fontWeight: 900, textTransform: 'uppercase', fontSize: 10}}
-                    />
-                    <Area type="monotone" dataKey="rev" stroke="#f59e0b" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" />
+                    <Tooltip cursor={{ stroke: '#10b981', strokeWidth: 2 }} contentStyle={{backgroundColor: '#0F0F12', border: 'none', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)'}} />
+                    <Area type="monotone" dataKey="bookings" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorEmerald)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            {/* Today's Agenda - New Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Reservations by Timeframe */}
-              <div className="bg-[#121215] border border-white/5 p-8 rounded-[2.5rem] space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
-                      <Utensils size={20} />
+            {/* Upcoming Reservations */}
+            <div className="bg-white/[0.02] border border-white/5 p-10 rounded-[3rem] space-y-8">
+               <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-white/40">
+                      <Calendar size={24} />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black uppercase tracking-tight text-white/90">Daily Reservations</h4>
-                      <p className="text-[10px] text-emerald-500 font-bold">Today's Seating</p>
+                      <h3 className="text-2xl font-black text-white tracking-tighter uppercase">Intelligent Pipeline</h3>
+                      <p className="text-xs text-white/40">Upcoming critical bookings for next 48 hours</p>
                     </div>
                   </div>
-                </div>
-
-                <div className="space-y-4">
-                  {[
-                    { slot: 'Lunch (12:00 - 15:00)', count: 12, tables: 4, next: '12:30 PM' },
-                    { slot: 'Dinner (19:00 - 23:00)', count: 45, tables: 18, next: '07:00 PM' }
-                  ].map((item, i) => (
-                    <div key={i} className="group p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-amber-500/20 transition-all">
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-white/40">{item.slot}</span>
-                        <div className="flex items-center gap-2">
-                           <span className="text-[10px] font-black text-amber-500">{item.count} Guests</span>
-                           <div className="w-1 h-1 rounded-full bg-white/20" />
-                           <span className="text-[10px] font-black text-white/60">{item.tables} Tables</span>
-                        </div>
+                  <div className="flex -space-x-4">
+                    {[Crown, Cake, UserPlus].map((I, i) => (
+                      <div key={i} className="w-10 h-10 rounded-full bg-[#0A0A0C] border-2 border-white/5 flex items-center justify-center text-emerald-500">
+                        <I size={14} />
                       </div>
-                      <div className="flex justify-between items-end">
-                        <div className="flex -space-x-2">
-                          {[1,2,3,4].map(j => (
-                            <div key={j} className="w-6 h-6 rounded-full border-2 border-[#121215] bg-amber-500 items-center justify-center flex text-[8px] font-black text-black">U{j}</div>
-                          ))}
-                        </div>
-                        <button className="text-[9px] font-black text-white/40 flex items-center gap-1 group-hover:text-amber-500 transition-colors">
-                          VIEW ALL <GripVertical size={10} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Special Orders: High Tea, Takeaway, Delivery */}
-              <div className="bg-[#121215] border border-white/5 p-8 rounded-[2.5rem] space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
-                      <Coffee size={20} />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-black uppercase tracking-tight text-white/90">Special Services</h4>
-                      <p className="text-[10px] text-purple-400 font-bold">On-demand volume</p>
-                    </div>
+                    ))}
                   </div>
-                </div>
+               </div>
 
-                <div className="grid grid-cols-1 gap-3">
-                   {[
-                     { label: 'High Teas', count: 8, icon: Coffee, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-                     { label: 'Takeaways', count: 14, icon: ShoppingBag, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                     { label: 'Deliveries', count: 22, icon: Truck, color: 'text-rose-500', bg: 'bg-rose-500/10' }
-                   ].map((item, i) => (
-                     <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all">
-                       <div className="flex items-center gap-4">
-                         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", item.bg, item.color)}>
-                            <item.icon size={18} />
-                         </div>
-                         <h5 className="text-[11px] font-black uppercase tracking-widest text-white/60">{item.label}</h5>
-                       </div>
-                       <span className="text-lg font-black text-white">{item.count}</span>
+               <div className="space-y-4">
+                 {upcoming.slice(0, 4).map((r, i) => (
+                   <motion.div 
+                     key={r.id}
+                     initial={{ opacity: 0, x: -20 }}
+                     animate={{ opacity: 1, x: 0 }}
+                     transition={{ delay: i * 0.1 }}
+                     className="group flex p-6 rounded-3xl bg-white/[0.02] border border-white/5 hover:border-emerald-500/20 hover:bg-white/[0.04] transition-all items-center gap-6"
+                   >
+                     <div className="flex flex-col items-center justify-center min-w-[70px] py-3 bg-white/5 rounded-2xl border border-white/5">
+                        <span className="text-xs font-black uppercase text-emerald-500">
+                          {new Date(r.date).toLocaleDateString('en-US', { month: 'short' })}
+                        </span>
+                        <span className="text-xl font-black text-white tracking-tighter">
+                          {new Date(r.date).getDate()}
+                        </span>
                      </div>
-                   ))}
-                </div>
-              </div>
+                     <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-black text-white text-lg tracking-tight">{r.guestName}</h4>
+                          {r.status === 'VIP' && <Crown size={14} className="text-amber-500" fill="currentColor" />}
+                        </div>
+                        <div className="flex items-center gap-3">
+                           <span className="text-[10px] font-black uppercase tracking-widest text-white/30">{r.session}</span>
+                           <span className="w-1 h-1 rounded-full bg-white/10" />
+                           <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">{r.time}</span>
+                           <span className="w-1 h-1 rounded-full bg-white/10" />
+                           <span className="text-[10px] font-black uppercase tracking-widest text-white/30">{r.guests} Guests</span>
+                        </div>
+                     </div>
+                     <div className="text-right">
+                        <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-white/5 rounded-full text-white/60">
+                          {r.tableId ? `Table ${r.tableId}` : 'Unassigned'}
+                        </span>
+                     </div>
+                     <ChevronRight className="text-white/10 group-hover:text-emerald-500 transition-colors" />
+                   </motion.div>
+                 ))}
+                 {upcoming.length === 0 && (
+                   <div className="py-12 text-center bg-white/[0.01] rounded-3xl border border-dashed border-white/5">
+                     <Calendar className="mx-auto text-white/10 mb-4" size={48} />
+                     <p className="text-white/20 font-black uppercase tracking-widest text-xs">No upcoming forecasts available</p>
+                   </div>
+                 )}
+               </div>
             </div>
           </div>
 
-          <div className="bg-[#121215] border border-white/5 p-10 rounded-[3rem] flex flex-col justify-between">
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <h3 className="text-xl font-black text-white uppercase tracking-tighter">Kitchen Efficiency</h3>
-                <p className="text-xs text-white/40">Real-time order prep velocity</p>
+          <div className="space-y-8">
+            {/* Table Occupancy Visualization */}
+            <div className="bg-white/[0.02] border border-white/5 p-10 rounded-[3rem] space-y-8">
+              <div>
+                <h3 className="text-xl font-black text-white uppercase tracking-tighter">Live Occupancy</h3>
+                <p className="text-xs text-white/40">Real-time floor state</p>
               </div>
-              <div className="space-y-6">
-                {[
-                  { label: 'Hot Apps', val: 92, color: 'bg-emerald-500' },
-                  { label: 'Main Course', val: 74, color: 'bg-amber-500' },
-                  { label: 'High Tea', val: 88, color: 'bg-purple-500' },
-                  { label: 'Pastry', val: 65, color: 'bg-blue-500' },
-                ].map((item, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
-                      <span className="text-white/60">{item.label}</span>
-                      <span className="text-white">{item.val}%</span>
+              <CircularProgress value={stats.occupancy} label="Active Floors" sublabel="Capacity utilized" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+                  <p className="text-[10px] font-bold text-white/40 uppercase mb-1">Available</p>
+                  <p className="text-xl font-black text-emerald-500">18</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+                  <p className="text-[10px] font-bold text-white/40 uppercase mb-1">Reserved</p>
+                  <p className="text-xl font-black text-blue-500">6</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Source Analytics */}
+            <div className="bg-white/[0.02] border border-white/5 p-10 rounded-[3rem] space-y-8">
+              <div>
+                <h3 className="text-xl font-black text-white uppercase tracking-tighter">Booking Source</h3>
+                <p className="text-xs text-white/40">Channel performance</p>
+              </div>
+              <div className="h-[200px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={sourceData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                      {sourceData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-3">
+                {sourceData.map((s, i) => (
+                  <div key={i} className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                      <span className="text-white/60">{s.name}</span>
                     </div>
-                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${item.val}%` }}
-                        transition={{ duration: 1.5, delay: i * 0.2 }}
-                        className={cn("h-full rounded-full", item.color)} 
-                      />
-                    </div>
+                    <span className="text-white">{s.value}%</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="mt-12 bg-white/5 p-6 rounded-[2rem] border border-white/5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-500">
-                   <Zap size={20} fill="currentColor" />
-                </div>
-                <div>
-                   <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">AI Optimizer</p>
-                   <p className="text-sm font-bold text-white leading-none">Yield Up +12%</p>
-                </div>
-              </div>
-              <p className="text-[10px] text-white/30 leading-relaxed font-medium">Predicting high seating volume for Dinner (S3). Suggesting 2 extra staff members.</p>
+            {/* High Tea Promo Card */}
+            <div className="relative p-10 rounded-[3rem] overflow-hidden group cursor-pointer bg-gradient-to-br from-purple-500/20 to-transparent border border-purple-500/20">
+               <div className="relative z-10 space-y-4">
+                 <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center text-purple-400">
+                    <Coffee size={24} />
+                 </div>
+                 <div>
+                    <h4 className="text-2xl font-black text-white tracking-tighter uppercase">High Tea Lounge</h4>
+                    <p className="text-xs text-purple-200/40">Exclusive slots available for S4</p>
+                 </div>
+                 <div className="flex items-center justify-between pt-4">
+                    <div className="flex flex-col">
+                       <span className="text-lg font-black text-white">{stats.highTea.length}</span>
+                       <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Bookings</span>
+                    </div>
+                    <ChevronRight className="text-white/20 group-hover:translate-x-2 transition-transform" />
+                 </div>
+               </div>
+               <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:rotate-12 transition-transform">
+                 <Coffee size={80} />
+               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* --- Modals --- */}
+      
+      <Modal 
+        isOpen={activeModal === 'reservations'} 
+        onClose={() => setActiveModal(null)}
+        title="Reservations Summary"
+        icon={Users}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {(Object.entries(stats.sessions) as [string, Reservation[]][]).map(([name, res]) => (
+            <div key={name} className="p-6 rounded-3xl bg-white/5 border border-white/5 space-y-6">
+              <div className="flex justify-between items-start">
+                <h4 className="text-sm font-black uppercase tracking-tight text-white/90">{name}</h4>
+                <div className="px-2 py-1 bg-white/5 rounded text-[10px] font-black text-emerald-500">Live</div>
+              </div>
+              <div className="flex items-center justify-between">
+                 <div className="space-y-1">
+                    <p className="text-3xl font-black text-white">{res.length}</p>
+                    <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Bookings</p>
+                 </div>
+                 <div className="text-right space-y-1">
+                    <p className="text-lg font-black text-emerald-500">{res.reduce((a, b) => a + b.guests, 0)}</p>
+                    <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Total Guests</p>
+                 </div>
+              </div>
+              <div className="space-y-2">
+                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-white/40">
+                   <span>Occupancy</span>
+                   <span>{Math.min(100, Math.round((res.length / 5) * 100))}%</span>
+                 </div>
+                 <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, (res.length / 5) * 100)}%` }} />
+                 </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal 
+        isOpen={activeModal === 'preorders'} 
+        onClose={() => setActiveModal(null)}
+        title="Pre-Order Console"
+        icon={ShoppingBag}
+      >
+        <div className="space-y-4">
+          {stats.preorders.map((r) => (
+            <div key={r.id} className="p-6 rounded-3xl bg-white/5 border border-white/5 flex flex-wrap lg:flex-nowrap gap-8 items-start">
+              <div className="flex-1 space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 font-black">
+                     {r.guestName.charAt(0)}
+                  </div>
+                  <div>
+                    <h4 className="font-black text-lg text-white">{r.guestName}</h4>
+                    <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Table {r.tableId || 'TBD'}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {r.preorderItems?.map((item, idx) => (
+                    <span key={idx} className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black text-white/60">
+                      {item.name} × {item.quantity}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-4 min-w-[200px]">
+                <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-emerald-500 text-black rounded-full">Confirmed</span>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Pickup Time</p>
+                  <p className="text-lg font-black text-white">{r.time}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+          {stats.preorders.length === 0 && (
+             <div className="py-24 text-center">
+                <ShoppingBag className="mx-auto text-white/5 mb-6" size={64} />
+                <p className="text-white/20 font-black uppercase tracking-widest text-sm">No active pre-orders for today's engine cycle</p>
+             </div>
+          )}
+        </div>
+      </Modal>
+
+      <Modal 
+        isOpen={activeModal === 'takeaway'} 
+        onClose={() => setActiveModal(null)}
+        title="Takeaway Tracker"
+        icon={Utensils}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {stats.takeaway.map(r => (
+            <div key={r.id} className="p-6 rounded-3xl bg-white/5 border border-white/5 space-y-4">
+              <div className="flex justify-between items-start">
+                <h4 className="font-black text-white">{r.guestName}</h4>
+                <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-[10px] font-black uppercase rounded-lg">Preparing</span>
+              </div>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center text-[10px] text-white/40 font-bold uppercase tracking-widest">
+                   <span>Progress</span>
+                   <span>12 mins rem.</span>
+                </div>
+                <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                   <motion.div initial={{ width: "30%" }} animate={{ width: "65%" }} className="h-full bg-blue-500" />
+                </div>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">Slot: {r.time}</span>
+                <button className="text-[10px] font-black text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest underline">Order Summary</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal 
+        isOpen={activeModal === 'delivery'} 
+        onClose={() => setActiveModal(null)}
+        title="Delivery Logistics"
+        icon={Truck}
+      >
+        <div className="space-y-6">
+          {stats.delivery.map(r => (
+            <div key={r.id} className="p-8 rounded-[2.5rem] bg-white/[0.02] border border-white/5 space-y-8">
+              <div className="flex flex-wrap justify-between items-start gap-4">
+                <div className="flex gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+                    <UserPlus size={24} />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black text-white">{r.guestName}</h4>
+                    <p className="text-xs text-white/40 flex items-center gap-2 mt-1">
+                      <MapPin size={12} /> HSR Layout, Sector 7
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end">
+                   <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-white/5 rounded-full text-purple-400 border border-purple-500/20 mb-2">In Transit</span>
+                   <p className="text-xs font-bold text-white/60">Dispatcher ID: #6622</p>
+                </div>
+              </div>
+              
+              <div className="relative">
+                <div className="h-0.5 w-full bg-white/5 absolute top-1/2 -translate-y-1/2" />
+                <div className="relative flex justify-between">
+                  {[
+                    { label: 'Confirmed', done: true },
+                    { label: 'Out for Delivery', done: true },
+                    { label: 'Arriving', done: false }
+                  ].map((step, i) => (
+                    <div key={i} className="flex flex-col items-center gap-2 relative z-10">
+                      <div className={cn("w-4 h-4 rounded-full", step.done ? "bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]" : "bg-white/10")} />
+                      <span className={cn("text-[8px] font-black uppercase tracking-widest", step.done ? "text-white" : "text-white/20")}>{step.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Modal>
     </div>
   );
 };

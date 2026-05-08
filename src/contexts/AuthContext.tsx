@@ -12,7 +12,7 @@ interface AuthContextType {
   userData: any | null;
   loading: boolean;
   error: string | null;
-  signInWithGoogle: () => Promise<void>;
+  login: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -71,32 +71,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe;
   }, []);
 
-  const signInWithGoogle = async () => {
+  const login = async () => {
     setError(null);
     setIsSigningIn(true);
     try {
-      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
-      const provider = new GoogleAuthProvider();
-      // Add custom parameters to handle framing issues if needed
-      provider.setCustomParameters({ prompt: 'select_account' });
-      
-      try {
-        await signInWithPopup(auth, provider);
-      } catch (e: any) {
-        console.error('Google Sign-In Error:', e);
-        if (e.code === 'auth/popup-blocked') {
-          setError('The sign-in popup was blocked by your browser. Please allow popups for this site.');
-        } else if (e.code === 'auth/cancelled-popup-request') {
-          // User closed the popup, don't show an error
-        } else if (e.code === 'auth/admin-restricted-operation') {
-          setError('Google Login is restricted in your Firebase project. Please enable Google Auth in the Firebase Console.');
-        } else {
-          setError('Failed to sign in with Google. Please try again.');
-        }
+      const { signInAnonymously } = await import('firebase/auth');
+      await signInAnonymously(auth);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      if (error.code === 'auth/admin-restricted-operation') {
+        // Fallback to local session to allow UI exploration
+        const demoUser = {
+          uid: 'demo-guest-' + Math.random().toString(36).substr(2, 9),
+          email: 'guest@tablepro.demo',
+          displayName: 'Guest Admin (Demo Mode)',
+          role: 'admin'
+        };
+        setUserData(demoUser);
+        console.warn('Anonymous Auth is disabled in Firebase Console. Entering Demo Mode with local state. To use real data, enable "Anonymous" in Firebase Console > Authentication > Sign-in method.');
+        setError('Anonymous login restricted. Enabled Demo Mode. To use real cloud storage, enable "Anonymous" in Firebase Console.');
+      } else {
+        setError('Failed to log in. Please try again.');
       }
-    } catch (error) {
-      console.error('Auth Module Load Error:', error);
-      setError('Failed to load authentication modules.');
     } finally {
       setIsSigningIn(false);
     }
@@ -118,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userData, 
       loading: loading || !isAuthReady || isSigningIn, 
       error, 
-      signInWithGoogle, 
+      login, 
       logout 
     }}>
       {children}

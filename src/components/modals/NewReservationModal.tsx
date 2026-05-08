@@ -6,6 +6,7 @@ import { collection, addDoc, serverTimestamp, query, where, onSnapshot, getDocs 
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { handleFirestoreError, OperationType } from '../../lib/firebase';
+import { useOutlet } from '../../contexts/OutletContext';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { 
@@ -186,8 +187,94 @@ const InteractiveDatePicker: React.FC<InteractiveDatePickerProps> = ({ value, on
   );
 };
 
+interface StyledSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[] | { value: string; label: string }[];
+  icon: React.ReactNode;
+  placeholder?: string;
+  className?: string;
+}
+
+const StyledSelect: React.FC<StyledSelectProps> = ({ value, onChange, options, icon, placeholder, className }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const displayLabel = useMemo(() => {
+    const option = options.find(o => typeof o === 'string' ? o === value : o.value === value);
+    if (!option) return value || placeholder;
+    return typeof option === 'string' ? option : option.label;
+  }, [value, options, placeholder]);
+
+  return (
+    <div className={cn("relative w-full", className)} ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full h-12 bg-white/[0.03] border border-white/10 rounded-2xl pl-11 pr-4 text-sm text-white flex items-center justify-between focus:border-amber-500/50 focus:bg-white/[0.05] outline-none transition-all hover:border-white/20 group"
+      >
+        <div className="absolute left-4 text-white/20 group-hover:text-amber-500 transition-colors">
+          {icon}
+        </div>
+        <span className={value ? "text-white" : "text-white/20"}>{displayLabel}</span>
+        <ChevronRight size={14} className={cn("text-white/20 transition-transform", isOpen && "rotate-90 text-amber-500")} />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            className="absolute left-0 right-0 mt-2 z-[120] bg-[#121215] border border-white/10 rounded-2xl p-2 shadow-2xl overflow-hidden"
+          >
+            <div className="max-h-[200px] overflow-y-auto no-scrollbar space-y-1">
+              {options.map((opt) => {
+                const optValue = typeof opt === 'string' ? opt : opt.value;
+                const optLabel = typeof opt === 'string' ? opt : opt.label;
+                const isSelected = optValue === value;
+
+                return (
+                  <button
+                    key={optValue}
+                    type="button"
+                    onClick={() => {
+                      onChange(optValue);
+                      setIsOpen(false);
+                    }}
+                    className={cn(
+                      "w-full px-4 py-3 rounded-xl text-left text-sm font-bold transition-all",
+                      isSelected 
+                        ? "bg-amber-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.3)]" 
+                        : "text-white/60 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
+                    {optLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+
 const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClose, initialDate }) => {
   const { user, userData } = useAuth();
+  const { outlet } = useOutlet();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [step, setStep] = useState(1);
@@ -359,10 +446,20 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
   }, [menuItems, menuSearch, selectedCategory, vegOnly]);
 
   const nextStep = () => {
-    if (step === 1 && !formData.reservationType) return;
+    if (step === 1 && (!formData.date || !formData.session || !formData.reservationType)) return;
     if (step === 2 && formData.selectedTables.length === 0) return;
+    if (step === 3 && (!formData.guestName.trim() || !formData.time || !formData.guests || !formData.phone.trim())) return;
     setStep(prev => prev + 1);
   };
+
+  const isStepValid = useMemo(() => {
+    if (step === 1) return formData.date && formData.session && formData.reservationType;
+    if (step === 2) return formData.selectedTables.length > 0;
+    if (step === 3) return formData.guestName.trim() && formData.time && formData.guests && formData.phone.trim();
+    if (step === 4) return true; // Pre-orders are optional
+    if (step === 5) return true;
+    return false;
+  }, [step, formData]);
   const prevStep = () => setStep(prev => prev - 1);
 
   const handleDownloadImage = async () => {
@@ -399,7 +496,7 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
     const maskedPhone = `********${formData.phone.slice(-2)}`;
     const emailInfo = formData.email ? `\nEmail: ${formData.email}` : '';
     
-    let text = `${formData.session} reservation confirmed!\nDate: ${formattedDate}\nat Everest Fine dine\nHost name: ${formData.salutation} ${formData.guestName}\nPhone no: ${maskedPhone}${emailInfo}\nNo of guest: ${formData.guests}\ntime of arrival: ${formData.time}`;
+    let text = `${formData.session} reservation confirmed!\nDate: ${formattedDate}\nat ${outlet?.name || 'Everest Fine dine'}\nHost name: ${formData.salutation} ${formData.guestName}\nPhone no: ${maskedPhone}${emailInfo}\nNo of guest: ${formData.guests}\ntime of arrival: ${formData.time}`;
     
     if (formData.preorderItems.length > 0) {
       text += `\n\npreorders like:\n${formData.preorderItems.map(i => `${i.name} x${i.qty}`).join('\n')}`;
@@ -508,8 +605,15 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                           <span className="text-[#0f172a]">Reservation Confirmed!</span>
                         </h2>
                         <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#64748b]">
-                          Everest D'Hotel Fine Dining
+                          {outlet?.name || "Everest D'Hotel Fine Dining"}
                         </p>
+                        <div className="flex items-center gap-2 justify-center mt-1">
+                          <div className="h-px w-3 bg-gradient-to-r from-transparent to-emerald-500/30" />
+                          <p className="text-[8px] font-black uppercase tracking-[0.4em] bg-gradient-to-r from-emerald-600 via-blue-600 to-emerald-600 bg-clip-text text-transparent animate-gradient-x">
+                            CONFIRMATION VOUCHER
+                          </p>
+                          <div className="h-px w-3 bg-gradient-to-l from-transparent to-emerald-500/30" />
+                        </div>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-y-6 gap-x-4 pt-4">
@@ -521,37 +625,42 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                           <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">Phone No</h4>
                           <p className="text-sm font-black text-[#0f172a]">********{formData.phone.slice(-2)}</p>
                         </div>
-                        {formData.email && (
-                          <div className="space-y-1">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">E-mail</h4>
-                            <p className="text-sm font-black text-[#0f172a] truncate max-w-[150px]">{formData.email}</p>
-                          </div>
-                        )}
+                        
                         <div className="space-y-1">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">E-mail</h4>
+                          <p className="text-sm font-black text-[#0f172a] truncate max-w-[150px]">{formData.email || "N/A"}</p>
+                        </div>
+                        <div className="space-y-1 text-right">
                           <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">Date</h4>
                           <p className="text-sm font-black text-[#0f172a]">
                             {new Date(formData.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                           </p>
                         </div>
-                        <div className="space-y-1 text-right">
-                          <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">No of guest</h4>
-                          <p className="text-sm font-black text-[#0f172a]">{formData.guests}</p>
-                        </div>
+
                         <div className="space-y-1">
-                          <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">time of arrival</h4>
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">Time of Arrival</h4>
                           <p className="text-sm font-black text-amber-600">{formData.time} ({formData.session})</p>
                         </div>
                         <div className="space-y-1 text-right">
-                          <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">Table</h4>
-                          <p className="text-sm font-black text-[#0f172a]">
-                            {formData.reservationType === 'section' ? 'Full Section' : `Table ${formData.selectedTables[0] || 'TBD'}`}
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">No of Guest</h4>
+                          <p className="text-sm font-black text-[#0f172a]">{formData.guests} PAX</p>
+                        </div>
+
+                        <div className="col-span-2 pt-4 border-t border-black/5 text-center space-y-1">
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-[#94a3b8]">Assigned Table</h4>
+                          <p className="text-xl font-black text-emerald-600">
+                            {formData.reservationType === 'section' ? 'Full Section Reserved' : `TABLE ${formData.selectedTables.join(', ') || 'PENDING'}`}
                           </p>
                         </div>
                       </div>
 
                       {formData.preorderItems.length > 0 && (
-                        <div className="p-6 bg-amber-500/5 border border-amber-500/10 rounded-[2rem] space-y-4">
-                           <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-600/60 text-center">Confirmed Pre-Orders</h4>
+                        <div className="mt-8 pt-8 border-t border-dashed border-black/10 space-y-4">
+                           <div className="flex items-center gap-3 justify-center">
+                             <div className="h-px w-8 bg-black/5" />
+                             <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-600">Pre-Order Summary</h4>
+                             <div className="h-px w-8 bg-black/5" />
+                           </div>
                            <div className="space-y-2">
                               {formData.preorderItems.map((item, idx) => (
                                 <div key={idx} className="flex justify-between items-center px-4 py-2.5 bg-white border border-black/[0.03] rounded-xl shadow-[0_2px_10px_rgba(0,0,0,0.01)] transition-all hover:border-amber-500/20">
@@ -619,34 +728,59 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
               ) : (
                 <div className="p-8">
                   {step === 1 && (
-                    <div className="grid grid-cols-1 gap-4">
-                      {[
-                        { id: 'single', label: 'Single Table', sub: 'Reserve one specific table', icon: User },
-                        { id: 'multiple', label: 'Multiple Tables', sub: 'Book multiple connected tables', icon: Users },
-                        { id: 'section', label: 'Full Section', sub: 'Perfect for large groups or events', icon: LayoutGrid }
-                      ].map(type => (
-                        <button
-                          key={type.id}
-                          onClick={() => setFormData({...formData, reservationType: type.id, selectedTables: []})}
-                          className={cn(
-                            "group p-6 rounded-[2rem] border transition-all text-left flex items-center gap-6",
-                            formData.reservationType === type.id 
-                              ? "bg-amber-500/10 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.1)]" 
-                              : "bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04]"
-                          )}
-                        >
-                          <div className={cn(
-                            "w-14 h-14 rounded-2xl flex items-center justify-center transition-all",
-                            formData.reservationType === type.id ? "bg-amber-500 text-black" : "bg-white/5 text-white/40"
-                          )}>
-                            <type.icon size={24} />
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-black text-white">{type.label}</h4>
-                            <p className="text-xs text-white/40">{type.sub}</p>
-                          </div>
-                        </button>
-                      ))}
+                    <div className="space-y-8">
+                      {/* Date and Session Selection Moved to Step 1 */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white/[0.02] border border-white/5 p-6 rounded-[2rem]">
+                        <div className="space-y-2">
+                          <label className={labelClasses}>Reservation Date *</label>
+                          <InteractiveDatePicker 
+                            value={formData.date} 
+                            onChange={date => setFormData({...formData, date})} 
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className={labelClasses}>Time Period (Session) *</label>
+                          <StyledSelect 
+                            value={formData.session} 
+                            onChange={value => setFormData({...formData, session: value})}
+                            options={['Breakfast', 'Lunch', 'Snacks', 'Evening', 'Dinner']}
+                            icon={<AlertCircle size={14} />}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <p className={labelClasses}>Select Reservation Type</p>
+                        <div className="grid grid-cols-1 gap-4">
+                          {[
+                            { id: 'single', label: 'Single Table', sub: 'Reserve one specific table', icon: User },
+                            { id: 'multiple', label: 'Multiple Tables', sub: 'Book multiple connected tables', icon: Users },
+                            { id: 'section', label: 'Full Section', sub: 'Perfect for large groups or events', icon: LayoutGrid }
+                          ].map(type => (
+                            <button
+                              key={type.id}
+                              onClick={() => setFormData({...formData, reservationType: type.id, selectedTables: []})}
+                              className={cn(
+                                "group p-6 rounded-[2rem] border transition-all text-left flex items-center gap-6",
+                                formData.reservationType === type.id 
+                                  ? "bg-amber-500/10 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.1)]" 
+                                  : "bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04]"
+                              )}
+                            >
+                              <div className={cn(
+                                "w-14 h-14 rounded-2xl flex items-center justify-center transition-all",
+                                formData.reservationType === type.id ? "bg-amber-500 text-black" : "bg-white/5 text-white/40"
+                              )}>
+                                <type.icon size={24} />
+                              </div>
+                              <div>
+                                <h4 className="text-lg font-black text-white">{type.label}</h4>
+                                <p className="text-xs text-white/40">{type.sub}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -720,15 +854,15 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                     <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <label className={labelClasses}>Guest Name</label>
+                          <label className={labelClasses}>Guest Name *</label>
                           <div className="flex gap-2">
-                            <select 
-                              className="w-24 h-12 bg-white/5 border border-white/5 rounded-2xl px-4 text-xs font-black text-white outline-none"
+                            <StyledSelect 
+                              className="w-32"
                               value={formData.salutation}
-                              onChange={e => setFormData({...formData, salutation: e.target.value})}
-                            >
-                              {['Mr.', 'Mrs.', 'Ms.', 'Dr.'].map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                              onChange={value => setFormData({...formData, salutation: value})}
+                              options={['Mr.', 'Mrs.', 'Ms.', 'Dr.']}
+                              icon={<User size={14} />}
+                            />
                             <div className="flex-1 relative">
                               <User size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
                               <input required type="text" className={inputClasses} value={formData.guestName} onChange={e => setFormData({...formData, guestName: e.target.value})} placeholder="Name" />
@@ -736,50 +870,34 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className={labelClasses}>Phone</label>
+                          <label className={labelClasses}>Phone *</label>
                           <div className="relative">
                             <Phone size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
                             <input required type="tel" className={inputClasses} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="+1 000 000 000" />
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className={labelClasses}>E-mail</label>
+                          <label className={labelClasses}>E-mail (Optional)</label>
                           <div className="relative">
                             <MessageCircle size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
                             <input type="email" className={inputClasses} value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="host@example.com" />
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className={labelClasses}>Time</label>
+                          <label className={labelClasses}>Time *</label>
                           <div className="relative">
                             <Clock size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
                             <input required type="time" className={inputClasses} value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} />
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className={labelClasses}>Session</label>
-                          <div className="relative">
-                            <AlertCircle size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
-                            <select className={cn(inputClasses, "appearance-none")} value={formData.session} onChange={e => setFormData({...formData, session: e.target.value})}>
-                              {['Breakfast', 'Lunch', 'Snacks', 'Evening', 'Dinner'].map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className={labelClasses}>Date</label>
-                          <InteractiveDatePicker 
-                            value={formData.date} 
-                            onChange={date => setFormData({...formData, date})} 
+                          <label className={labelClasses}>Guests Count *</label>
+                          <StyledSelect 
+                            value={formData.guests} 
+                            onChange={value => setFormData({...formData, guests: value})}
+                            options={[1,2,3,4,5,6,8,10,12,15,20].map(n => ({ value: String(n), label: `${n} PAX` }))}
+                            icon={<Users size={14} />}
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <label className={labelClasses}>Guests</label>
-                          <div className="relative">
-                            <Users size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
-                            <select className={cn(inputClasses, "appearance-none")} value={formData.guests} onChange={e => setFormData({...formData, guests: e.target.value})}>
-                              {[1,2,3,4,5,6,8,10,12,15,20].map(n => <option key={n} value={n}>{n} PAX</option>)}
-                            </select>
-                          </div>
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -999,9 +1117,12 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                   </button>
                 )}
                 <button
-                  disabled={loading}
+                  disabled={loading || !isStepValid}
                   onClick={step === 5 ? handleSubmit : nextStep}
-                  className="flex-[2] h-14 rounded-2xl bg-amber-500 text-black font-black uppercase tracking-widest hover:bg-amber-600 transition-all flex items-center justify-center gap-2 shadow-xl"
+                  className={cn(
+                    "flex-[2] h-14 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl",
+                    isStepValid ? "bg-amber-500 text-black hover:bg-amber-600" : "bg-white/5 text-white/20 cursor-not-allowed border border-white/5"
+                  )}
                 >
                   {loading ? <Loader2 className="animate-spin" /> : (
                     <>

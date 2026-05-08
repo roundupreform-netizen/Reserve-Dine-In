@@ -5,6 +5,7 @@ import { format, addDays } from 'date-fns';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useOutlet } from '../contexts/OutletContext';
 import { GlassCard, Button, Input, Label, cn } from '../components/ui/core';
 
 const TIME_SLOTS = [
@@ -15,6 +16,7 @@ const GUEST_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export default function ReservationScreen() {
   const { user, userData, logout } = useAuth();
+  const { outlet } = useOutlet();
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [time, setTime] = useState("");
   const [guests, setGuests] = useState(2);
@@ -82,7 +84,7 @@ export default function ReservationScreen() {
         <div className="absolute bottom-10 left-8">
           <div className="flex items-center gap-2 text-emerald-400 mb-2">
             <Utensils size={18} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.3em]">Everest Bistro</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.3em]">{outlet?.name || 'Everest Bistro'}</span>
           </div>
           <h1 className="text-5xl font-bold tracking-tighter">Reserve Dine</h1>
         </div>
