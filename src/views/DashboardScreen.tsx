@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Users, Calendar, ChevronRight, Search, Bell, Plus, Clock, 
+  Users, Calendar, GripVertical, Search, Bell, Plus, Clock, 
   LayoutDashboard, Settings, LogOut, Utensils, Phone, User, 
   MapPin, Check, X, Filter
 } from 'lucide-react';
@@ -23,7 +23,7 @@ const TABLE_COUNT = 24; // Total tables in floor plan
 import { getRestaurantInsights } from '../services/geminiService';
 
 export default function DashboardScreen() {
-  const { userData, logout } = useAuth();
+  const { user, userData, logout } = useAuth();
   const [reservations, setReservations] = useState<any[]>([]);
   const [activeSession, setActiveSession] = useState('Evening');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -36,7 +36,7 @@ export default function DashboardScreen() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
-
+ 
   // Form State
   const [formData, setFormData] = useState({
     guestName: '',
@@ -51,20 +51,24 @@ export default function DashboardScreen() {
     sectionId: '',
     tableNumbers: [] as number[],
   });
-
+ 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
+ 
   useEffect(() => {
+    if (!user || !userData) return;
     const q = query(collection(db, 'reservations'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setReservations(data);
+    }, (error) => {
+      // It's good to handle errors here too
+      console.error("Firestore Error in DashboardScreen:", error);
     });
     return unsubscribe;
-  }, []);
+  }, [user, userData]);
 
   const getGreeting = () => {
     const hour = currentTime.getHours();
@@ -439,7 +443,7 @@ export default function DashboardScreen() {
                         <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">
                           {res.reservationType === 'section' ? 'ZONE LOCK' : `T-${res.tableNumber || res.tables?.[0]}`}
                         </span>
-                        <ChevronRight size={14} className="text-white/20" />
+                        <GripVertical size={14} className="text-white/20" />
                       </div>
                     </motion.div>
                   ))}

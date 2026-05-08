@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 
 interface OutletData {
@@ -33,6 +33,8 @@ export const OutletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setOutlet(doc.data() as OutletData);
       }
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'outlets/main-outlet');
     });
 
     return () => unsub();

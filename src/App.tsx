@@ -13,7 +13,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import NewReservationModal from './components/modals/NewReservationModal';
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, userData, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<NavItem>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isNewReservationModalOpen, setIsNewReservationModalOpen] = useState(false);
@@ -30,7 +30,7 @@ function App() {
     );
   }
 
-  if (!user) return <AuthScreen />;
+  if (!userData) return <AuthScreen />;
 
   const renderContent = () => {
     const props = { onNewReservation: () => setIsNewReservationModalOpen(true) };

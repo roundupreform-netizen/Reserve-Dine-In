@@ -13,8 +13,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
+        request.auth.token.email == 'roundupreform@gmail.com' ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
@@ -39,29 +40,37 @@ service cloud.firestore {
 
     function isValidReservation(data) {
       return data.guestName is string && data.guestName.size() <= 100 &&
-             data.phone is string && data.phone.size() <= 20 &&
              data.guests is int && data.guests > 0 && data.guests <= 100 &&
              data.date is string && data.status in ['pending', 'confirmed', 'seated', 'cancelled', 'completed', 'VIP'];
     }
 
     // Collections
+    match /test/connection {
+      allow read, write: if true;
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow write: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (request.auth.uid == userId && !incoming().diff(existing()).affectedKeys().hasAny(['uid', 'email']))
+      );
+      allow delete: if isAdmin();
     }
 
     match /outlets/{outletId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdmin() && isValidOutlet(incoming()) && isValidId(outletId);
     }
 
     match /reservations/{resId} {
-      allow list: if isSignedIn();
-      allow get: if isSignedIn();
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && isValidReservation(incoming()) && isValidId(resId);
       allow update: if isSignedIn() && (
         isAdmin() || 
-        (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'tableId', 'sectionId', 'time', 'guests']))
+        (resource.data.userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'guests', 'time']))
       ) && isValidReservation(incoming());
       allow delete: if isAdmin();
     }

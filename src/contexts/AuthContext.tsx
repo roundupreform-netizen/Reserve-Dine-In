@@ -24,96 +24,103 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if there's a mock session in localStorage for this environment
-    const savedUser = localStorage.getItem('demo_user');
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        setUser(parsed as User);
-        setUserData({
-          uid: parsed.uid,
-          email: parsed.email,
-          displayName: parsed.displayName,
-          role: 'admin'
-        });
-      } catch (e) {
-        localStorage.removeItem('demo_user');
-      }
-    }
-    setLoading(false);
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setIsAuthReady(true);
       if (firebaseUser) {
-        // If we still have firebase auth working (e.g. anonymous), handle it
         setUser(firebaseUser);
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-        
-        if (!userSnap.exists()) {
-          const newUserData = {
+        try {
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (!userSnap.exists()) {
+            const newUserData = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || 'demo@guest.com',
+              displayName: firebaseUser.displayName || 'Demo User',
+              role: 'admin',
+              createdAt: serverTimestamp(),
+            };
+            await setDoc(userRef, newUserData);
+            setUserData(newUserData);
+          } else {
+            setUserData(userSnap.data());
+          }
+        } catch (err) {
+          console.error("Error fetching user data:", err);
+          // Fallback if firestore fails but auth succeeded
+          setUserData({
             uid: firebaseUser.uid,
-            email: firebaseUser.email || 'demo@guest.com',
-            displayName: firebaseUser.displayName || 'Demo User',
-            role: 'admin',
-            createdAt: serverTimestamp(),
-          };
-          await setDoc(userRef, newUserData);
-          setUserData(newUserData);
-        } else {
-          setUserData(userSnap.data());
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName || 'Guest',
+            role: 'admin'
+          });
         }
+      } else {
+        setUser(null);
+        setUserData(null);
       }
+      setLoading(false);
+      setIsSigningIn(false);
     });
 
     return unsubscribe;
   }, []);
 
-  const loginAsAdmin = async () => {
+  const signInWithGoogle = async () => {
     setError(null);
+    setIsSigningIn(true);
     try {
-      // For immediate unblocking in shared environments, we use a mock session
-      // while attempting an anonymous firebase session if possible
-      const mockUser = {
-        uid: 'demo-admin-id',
-        email: AUTHORIZED_EMAIL,
-        displayName: 'Project Admin',
-        emailVerified: true
-      };
+      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+      const provider = new GoogleAuthProvider();
+      // Add custom parameters to handle framing issues if needed
+      provider.setCustomParameters({ prompt: 'select_account' });
       
-      localStorage.setItem('demo_user', JSON.stringify(mockUser));
-      setUser(mockUser as any);
-      setUserData({
-        uid: mockUser.uid,
-        email: mockUser.email,
-        displayName: mockUser.displayName,
-        role: 'admin'
-      });
-      
-      // Attempt anonymous auth in background to have a real Firestore token if available
       try {
-        const { signInAnonymously } = await import('firebase/auth');
-        await signInAnonymously(auth);
-      } catch (e) {
-        console.warn('Anonymous auth failed, continuing with mock session');
+        await signInWithPopup(auth, provider);
+      } catch (e: any) {
+        console.error('Google Sign-In Error:', e);
+        if (e.code === 'auth/popup-blocked') {
+          setError('The sign-in popup was blocked by your browser. Please allow popups for this site.');
+        } else if (e.code === 'auth/cancelled-popup-request') {
+          // User closed the popup, don't show an error
+        } else if (e.code === 'auth/admin-restricted-operation') {
+          setError('Google Login is restricted in your Firebase project. Please enable Google Auth in the Firebase Console.');
+        } else {
+          setError('Failed to sign in with Google. Please try again.');
+        }
       }
     } catch (error) {
-      console.error('Login Error:', error);
-      setError('Failed to initialize access. Please try again.');
+      console.error('Auth Module Load Error:', error);
+      setError('Failed to load authentication modules.');
+    } finally {
+      setIsSigningIn(false);
     }
   };
 
   const logout = async () => {
-    localStorage.removeItem('demo_user');
-    await signOut(auth);
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
     setUser(null);
     setUserData(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, userData, loading, error, signInWithGoogle: loginAsAdmin, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      userData, 
+      loading: loading || !isAuthReady || isSigningIn, 
+      error, 
+      signInWithGoogle, 
+      logout 
+    }}>
       {children}
     </AuthContext.Provider>
   );

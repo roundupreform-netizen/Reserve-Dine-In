@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Clock, Users, MessageSquare, CheckCircle2, ChevronRight, Utensils } from 'lucide-react';
+import { Calendar, Clock, Users, MessageSquare, CheckCircle2, GripVertical, Utensils } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -14,7 +14,7 @@ const TIME_SLOTS = [
 const GUEST_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export default function ReservationScreen() {
-  const { user, logout } = useAuth();
+  const { user, userData, logout } = useAuth();
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [time, setTime] = useState("");
   const [guests, setGuests] = useState(2);
@@ -23,7 +23,7 @@ export default function ReservationScreen() {
   const [completed, setCompleted] = useState(false);
 
   const handleSubmit = async () => {
-    if (!user) return;
+    if (!userData) return;
     setLoading(true);
     try {
       // Determine session based on time
@@ -35,8 +35,8 @@ export default function ReservationScreen() {
       else session = 'Dinner';
 
       await addDoc(collection(db, 'reservations'), {
-        userId: user.uid,
-        guestName: user.displayName || 'Guest',
+        userId: user?.uid || userData.uid,
+        guestName: user?.displayName || userData.displayName || 'Guest',
         date,
         time,
         guests,
@@ -176,7 +176,7 @@ export default function ReservationScreen() {
             onClick={handleSubmit}
           >
             {loading ? "Processing..." : "Complete Reservation"}
-            <ChevronRight size={20} />
+            <GripVertical size={20} />
           </Button>
           
           <p className="text-[10px] text-center text-white/20 uppercase tracking-[0.2em] font-bold mt-4">

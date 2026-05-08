@@ -13,8 +13,7 @@ import {
   Store, 
   BarChart3, 
   Settings, 
-  ChevronLeft, 
-  ChevronRight,
+  GripVertical,
   LogOut,
   Bell,
   Search,
@@ -183,7 +182,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, 
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 transition-colors"
           >
-            {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            {isCollapsed ? <GripVertical size={20} /> : <GripVertical size={20} />}
           </button>
           <button 
             onClick={logout}

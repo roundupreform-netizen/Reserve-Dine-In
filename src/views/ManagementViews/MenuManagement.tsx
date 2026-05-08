@@ -15,12 +15,14 @@ import {
   AlertCircle,
   Tag
 } from 'lucide-react';
-import { db } from '../../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../contexts/AuthContext';
 
 const MenuManagement = () => {
+  const { user, userData } = useAuth();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuType, setMenuType] = useState<'dine-in' | 'high-tea'>('dine-in');
@@ -45,14 +47,18 @@ const MenuManagement = () => {
     : ['All', 'Snacks', 'Tea', 'Coffee', 'Desserts', 'Bakery'];
 
   useEffect(() => {
+    if (!user || !userData) return;
+
     setLoading(true);
     const q = query(collection(db, 'menuItems'));
     const unsub = onSnapshot(q, (snap) => {
       setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'menuItems');
     });
     return unsub;
-  }, []);
+  }, [user, userData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

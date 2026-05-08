@@ -14,12 +14,14 @@ import {
   Search,
   MoreVertical
 } from 'lucide-react';
-import { db } from '../../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, getDocs, addDoc, deleteDoc, doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../contexts/AuthContext';
 
 const TableManagement = () => {
+  const { user, userData } = useAuth();
   const [sections, setSections] = useState<any[]>([]);
   const [tables, setTables] = useState<any[]>([]);
   const [halls, setHalls] = useState<any[]>([]);
@@ -38,15 +40,23 @@ const TableManagement = () => {
   });
 
   useEffect(() => {
+    if (!user || !userData) return;
+    
     setLoading(true);
     const unsubSections = onSnapshot(collection(db, 'sections'), (snap) => {
       setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'sections');
     });
     const unsubTables = onSnapshot(collection(db, 'tables'), (snap) => {
       setTables(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'tables');
     });
     const unsubHalls = onSnapshot(collection(db, 'halls'), (snap) => {
       setHalls(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'halls');
     });
 
     setLoading(false);
@@ -55,7 +65,7 @@ const TableManagement = () => {
       unsubTables();
       unsubHalls();
     };
-  }, []);
+  }, [user, userData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

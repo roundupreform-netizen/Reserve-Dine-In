@@ -8,29 +8,35 @@ import {
   Clock, 
   Users, 
   MoreVertical,
-  ChevronRight,
   MessageSquare,
   AlertCircle
 } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 const ReservationsView = ({ onNewReservation }: { onNewReservation?: () => void }) => {
+  const { user, userData } = useAuth();
   const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
+    if (!user || !userData) return;
+    setLoading(true);
+
     const q = query(collection(db, 'reservations'));
     const unsub = onSnapshot(q, (snap) => {
       setReservations(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'reservations');
     });
     return unsub;
-  }, []);
+  }, [user, userData]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

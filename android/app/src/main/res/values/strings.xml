@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Reserve dine in</string>
+    <string name="title_activity_main">Reserve dine in</string>
+    <string name="package_name">com.reservedinein.app</string>
+    <string name="custom_url_scheme">com.reservedinein.app</string>
+</resources>

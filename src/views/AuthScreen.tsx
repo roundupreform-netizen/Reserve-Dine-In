@@ -19,7 +19,7 @@ export default function AuthScreen() {
           animate={{ scale: 1, rotate: 45 }}
           className="w-20 h-20 bg-emerald-500 rounded-3xl flex items-center justify-center shadow-[0_10px_40px_rgba(16,185,129,0.4)] mb-8 mx-auto"
         >
-          <div className="w-10 h-10 border-2 border-white rounded-md -rotate-45 flex items-center justify-center">
+          <div className="w-10 h-10 border-white -rotate-45 flex items-center justify-center" style={{ borderStyle: 'solid', borderRadius: '200px', borderWidth: '3.6px' }}>
             <div className="w-2 h-2 bg-white rounded-full"></div>
           </div>
         </motion.div>
@@ -39,14 +39,18 @@ export default function AuthScreen() {
 
         <div className="w-full max-w-xs mx-auto">
           <Button 
-            className="w-full h-16 bg-emerald-500 text-white hover:bg-emerald-600 shadow-[0_15px_35px_rgba(16,185,129,0.2)] border-none rounded-[1.25rem] text-sm font-black uppercase tracking-[0.2em]"
+            className="w-full h-16 bg-emerald-500 text-white hover:bg-emerald-600 shadow-[0_15px_35px_rgba(16,185,129,0.2)] border-none text-sm font-black uppercase tracking-[0.2em]"
+            style={{ borderStyle: 'ridge', borderRadius: '25px', borderWidth: '20px' }}
             onClick={signInWithGoogle}
           >
             <LogIn size={20} />
             Enter Dashboard
           </Button>
           
-          <p className="text-[9px] text-white/10 uppercase tracking-[0.3em] font-bold mt-8">
+          <p 
+            className="text-[9px] uppercase tracking-[0.3em] font-bold mt-8"
+            style={{ textAlign: 'center', fontStyle: 'normal', textDecoration: 'none', fontWeight: 'normal', borderColor: '#010101', borderRadius: '1px', borderWidth: '1px', borderStyle: 'groove', backgroundColor: '#040500' }}
+          >
             Internal Management Access
           </p>
         </div>

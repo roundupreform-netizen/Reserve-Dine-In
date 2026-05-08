@@ -16,9 +16,9 @@ import {
   Coffee,
   ShoppingBag,
   Truck,
-  ArrowRight
+  GripVertical
 } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 import { collection, query, onSnapshot, getDocs, where } from 'firebase/firestore';
@@ -35,7 +35,7 @@ import {
 } from 'recharts';
 
 const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: any) => void, onNewReservation?: () => void }) => {
-  const { userData } = useAuth();
+  const { user, userData } = useAuth();
   const [stats, setStats] = useState({
     totalBookings: 0,
     activeGuests: 0,
@@ -56,6 +56,9 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
   }, []);
 
   useEffect(() => {
+    if (!user || !userData) return;
+    setLoading(true);
+
     const unsubRes = onSnapshot(collection(db, 'reservations'), (snap) => {
       const res = snap.docs.map(d => d.data());
       const active = res.filter(r => r.status === 'seated').length;
@@ -66,9 +69,11 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
         occupancyRate: Math.round((active / 24) * 100) // Assuming 24 tables for demo
       }));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'reservations');
     });
     return unsubRes;
-  }, []);
+  }, [user, userData]);
 
   const data = [
     { name: '08 AM', count: 12, rev: 4500 },
@@ -234,7 +239,7 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
                           ))}
                         </div>
                         <button className="text-[9px] font-black text-white/40 flex items-center gap-1 group-hover:text-amber-500 transition-colors">
-                          VIEW ALL <ArrowRight size={10} />
+                          VIEW ALL <GripVertical size={10} />
                         </button>
                       </div>
                     </div>

@@ -1,11 +1,29 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, User, Phone, Users, Calendar, Clock, MessageSquare, AlertCircle, Loader2, LayoutGrid, Tag, Coffee, Check, Share2, Download, MessageCircle, Instagram, Facebook, Send, Search, Minus, Plus, ShoppingCart, Leaf, Flame } from 'lucide-react';
+import { X, User, Phone, Users, Calendar, Clock, MessageSquare, AlertCircle, Loader2, LayoutGrid, Tag, Coffee, Check, Share2, Download, MessageCircle, Instagram, Facebook, Send, Search, Minus, Plus, ShoppingCart, Leaf, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
 import { db } from '../../lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../contexts/AuthContext';
+import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { 
+  format, 
+  addMonths, 
+  subMonths, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfWeek, 
+  endOfWeek, 
+  isSameMonth, 
+  isSameDay, 
+  addDays, 
+  eachDayOfInterval,
+  isToday,
+  startOfToday,
+  isBefore
+} from 'date-fns';
 
 interface NewReservationModalProps {
   isOpen: boolean;
@@ -41,7 +59,135 @@ interface MenuItem {
   type: 'veg' | 'non-veg';
 }
 
+interface InteractiveDatePickerProps {
+  value: string;
+  onChange: (date: string) => void;
+}
+
+const InteractiveDatePicker: React.FC<InteractiveDatePickerProps> = ({ value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(value ? new Date(value) : new Date());
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const selectedDate = value ? new Date(value) : null;
+  const today = startOfToday();
+
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(monthStart);
+  const startDate = startOfWeek(monthStart);
+  const endDate = endOfWeek(monthEnd);
+
+  const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
+
+  const handleDateSelect = (date: Date) => {
+    if (isBefore(date, today) && !isSameDay(date, today)) return;
+    onChange(format(date, 'yyyy-MM-dd'));
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={popoverRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full h-12 bg-white/[0.03] border border-white/10 rounded-2xl pl-11 pr-4 text-sm text-white flex items-center justify-between focus:border-amber-500/50 focus:bg-white/[0.05] outline-none transition-all hover:border-white/20 group"
+      >
+        <Calendar size={14} className="absolute left-4 text-white/20 group-hover:text-amber-500 transition-colors" />
+        <span className={value ? "text-white" : "text-white/20"}>
+          {value ? format(new Date(value), 'PPP') : "Select date"}
+        </span>
+        <ChevronRight size={14} className={cn("text-white/20 transition-transform", isOpen && "rotate-90 text-amber-500")} />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            className="absolute left-0 right-0 md:left-auto md:right-0 mt-2 z-[110] bg-[#121215] border border-white/10 rounded-3xl p-4 shadow-2xl overflow-hidden min-w-[300px]"
+          >
+            <div className="flex items-center justify-between mb-4 px-2">
+              <h4 className="text-xs font-black uppercase tracking-widest text-white">
+                {format(currentMonth, 'MMMM yyyy')}
+              </h4>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={prevMonth}
+                  className="p-2 hover:bg-white/5 rounded-xl text-white/40 hover:text-white transition-colors"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={nextMonth}
+                  className="p-2 hover:bg-white/5 rounded-xl text-white/40 hover:text-white transition-colors"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 mb-2">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                <div key={i} className="text-center text-[10px] font-black text-white/20 p-2">
+                  {d}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDays.map((date, idx) => {
+                const isSelected = selectedDate ? isSameDay(date, selectedDate) : false;
+                const isPast = isBefore(date, today) && !isSameDay(date, today);
+                const isCurrentMonth = isSameMonth(date, monthStart);
+
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    disabled={isPast || !isCurrentMonth}
+                    onClick={() => handleDateSelect(date)}
+                    className={cn(
+                      "h-9 rounded-xl flex items-center justify-center text-[11px] font-bold transition-all relative group",
+                      !isCurrentMonth && "opacity-0 pointer-events-none",
+                      isPast && "text-white/10 cursor-not-allowed",
+                      isSelected 
+                        ? "bg-amber-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.3)]" 
+                        : isCurrentMonth && !isPast && "hover:bg-white/5 text-white/60 hover:text-white"
+                    )}
+                  >
+                    {format(date, 'd')}
+                    {isToday(date) && !isSelected && (
+                      <div className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-500" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClose, initialDate }) => {
+  const { user, userData } = useAuth();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [step, setStep] = useState(1);
@@ -56,6 +202,7 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
   const [formData, setFormData] = useState({
     salutation: 'Mr.',
     guestName: '',
+    email: '',
     phone: '',
     guests: '2',
     date: initialDate || new Date().toISOString().split('T')[0],
@@ -86,7 +233,7 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
   }, [initialDate, isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !user || !userData) return;
     
     // Fetch Menu Items
     const qMenu = query(collection(db, 'menuItems'), where('availability', '==', true));
@@ -105,19 +252,23 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
       } else {
         setMenuItems(items);
       }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'menuItems');
     });
 
     // Fetch reservations for the selected date to hide/disable tables
     const qReservations = query(collection(db, 'reservations'), where('date', '==', formData.date));
     const unsubRes = onSnapshot(qReservations, (snap) => {
       setExistingReservations(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'reservations');
     });
 
     return () => {
       unsubMenu();
       unsubRes();
     };
-  }, [formData.date, isOpen]);
+  }, [formData.date, isOpen, user, userData]);
 
   const bookedTables = useMemo(() => {
     return existingReservations
@@ -246,8 +397,9 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
     const tables = formData.reservationType === 'section' ? `Section ${formData.sectionId}` : formData.selectedTables.join(', ');
     const formattedDate = new Date(formData.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const maskedPhone = `********${formData.phone.slice(-2)}`;
+    const emailInfo = formData.email ? `\nEmail: ${formData.email}` : '';
     
-    let text = `${formData.session} reservation confirmed!\nDate: ${formattedDate}\nat Everest Fine dine\nHost name: ${formData.salutation} ${formData.guestName}\nPhone no: ${maskedPhone}\nNo of guest: ${formData.guests}\ntime of arrival: ${formData.time}`;
+    let text = `${formData.session} reservation confirmed!\nDate: ${formattedDate}\nat Everest Fine dine\nHost name: ${formData.salutation} ${formData.guestName}\nPhone no: ${maskedPhone}${emailInfo}\nNo of guest: ${formData.guests}\ntime of arrival: ${formData.time}`;
     
     if (formData.preorderItems.length > 0) {
       text += `\n\npreorders like:\n${formData.preorderItems.map(i => `${i.name} x${i.qty}`).join('\n')}`;
@@ -369,6 +521,12 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                           <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">Phone No</h4>
                           <p className="text-sm font-black text-[#0f172a]">********{formData.phone.slice(-2)}</p>
                         </div>
+                        {formData.email && (
+                          <div className="space-y-1">
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">E-mail</h4>
+                            <p className="text-sm font-black text-[#0f172a] truncate max-w-[150px]">{formData.email}</p>
+                          </div>
+                        )}
                         <div className="space-y-1">
                           <h4 className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">Date</h4>
                           <p className="text-sm font-black text-[#0f172a]">
@@ -585,6 +743,13 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                           </div>
                         </div>
                         <div className="space-y-2">
+                          <label className={labelClasses}>E-mail</label>
+                          <div className="relative">
+                            <MessageCircle size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
+                            <input type="email" className={inputClasses} value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="host@example.com" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
                           <label className={labelClasses}>Time</label>
                           <div className="relative">
                             <Clock size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
@@ -596,16 +761,16 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                           <div className="relative">
                             <AlertCircle size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
                             <select className={cn(inputClasses, "appearance-none")} value={formData.session} onChange={e => setFormData({...formData, session: e.target.value})}>
-                              {['Breakfast', 'Lunch', 'Evening', 'Dinner'].map(s => <option key={s} value={s}>{s}</option>)}
+                              {['Breakfast', 'Lunch', 'Snacks', 'Evening', 'Dinner'].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                           </div>
                         </div>
                         <div className="space-y-2">
                           <label className={labelClasses}>Date</label>
-                          <div className="relative">
-                            <Calendar size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
-                            <input required type="date" className={inputClasses} value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
-                          </div>
+                          <InteractiveDatePicker 
+                            value={formData.date} 
+                            onChange={date => setFormData({...formData, date})} 
+                          />
                         </div>
                         <div className="space-y-2">
                           <label className={labelClasses}>Guests</label>
@@ -769,6 +934,7 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                              <div>
                                 <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Guest</p>
                                 <p className="text-sm font-bold text-white">{formData.salutation} {formData.guestName}</p>
+                                {formData.email && <p className="text-[10px] text-white/40 mt-1">{formData.email}</p>}
                              </div>
                              <div>
                                 <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Schedule</p>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ChevronLeft, 
-  ChevronRight, 
+  GripVertical, 
   Calendar as CalendarIcon,
   Clock,
   Users,
@@ -17,8 +17,9 @@ import {
   MoreVertical,
   Utensils
 } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   format, 
   addMonths, 
@@ -48,6 +49,7 @@ import NewReservationModal from '../components/modals/NewReservationModal';
 type ViewMode = 'month' | 'week' | 'day';
 
 const CalendarView = () => {
+  const { user, userData } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
@@ -56,13 +58,18 @@ const CalendarView = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
+    if (!user || !userData) return;
+    setLoading(true);
+
     const q = query(collection(db, 'reservations'));
     const unsub = onSnapshot(q, (snap) => {
       setReservations(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'reservations');
     });
     return unsub;
-  }, []);
+  }, [user, userData]);
 
   const getDayReservations = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -143,7 +150,7 @@ const CalendarView = () => {
             Today
           </button>
           <button onClick={next} className="p-2.5 rounded-xl hover:bg-white/5 transition-colors text-white/40 hover:text-white">
-            <ChevronRight size={20} />
+            <GripVertical size={20} />
           </button>
         </div>
 
