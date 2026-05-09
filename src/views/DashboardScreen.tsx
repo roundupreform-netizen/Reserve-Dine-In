@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, Calendar, GripVertical, Search, Bell, Plus, Clock, 
   LayoutDashboard, Settings, LogOut, Utensils, Phone, User, 
-  MapPin, Check, X, Filter
+  MapPin, Check, X, Filter, Lock
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, setDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';

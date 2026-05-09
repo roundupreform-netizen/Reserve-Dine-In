@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, User, Phone, Users, Calendar, Clock, MessageSquare, AlertCircle, Loader2, LayoutGrid, Tag, Coffee, Check, Share2, Download, MessageCircle, Instagram, Facebook, Send, Search, Minus, Plus, ShoppingCart, Leaf, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, User, Phone, Users, Calendar, Clock, MessageSquare, AlertCircle, Loader2, LayoutGrid, Tag, Coffee, Check, Share2, Download, MessageCircle, Globe, Share, Send, Search, Minus, Plus, ShoppingCart, Leaf, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
 import { db } from '../../lib/firebase';
-import { collection, addDoc, serverTimestamp, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, onSnapshot, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import { useOutlet } from '../../contexts/OutletContext';
+import ValidationWarningModal from './ValidationWarningModal';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { 
@@ -23,13 +24,29 @@ import {
   eachDayOfInterval,
   isToday,
   startOfToday,
-  isBefore
+  isBefore,
+  parse,
+  isEqual
 } from 'date-fns';
+
+/**
+ * Checks if a combined date and time is in the past.
+ */
+const isDateTimePast = (dateStr: string, timeStr: string) => {
+  if (!dateStr || !timeStr) return false;
+  try {
+    const selectedDateTime = parse(`${dateStr} ${timeStr}`, 'yyyy-MM-dd HH:mm', new Date());
+    return isBefore(selectedDateTime, new Date());
+  } catch (e) {
+    return false;
+  }
+};
 
 interface NewReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialDate?: string;
+  initialData?: any;
 }
 
 const SECTIONS = [
@@ -55,23 +72,36 @@ interface MenuItem {
   name: string;
   category: string;
   price: number;
-  image?: string;
-  availability: boolean;
+  isAvailable: boolean;
   type: 'veg' | 'non-veg';
 }
 
 interface InteractiveDatePickerProps {
   value: string;
   onChange: (date: string) => void;
+  onError: () => void;
 }
 
-const InteractiveDatePicker: React.FC<InteractiveDatePickerProps> = ({ value, onChange }) => {
+const InteractiveDatePicker: React.FC<InteractiveDatePickerProps> = ({ value, onChange, onError }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(value ? new Date(value) : new Date());
+  const [isShaking, setIsShaking] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const selectedDate = value ? new Date(value) : null;
   const today = startOfToday();
+
+  const handleDateSelect = (date: Date) => {
+    const isPast = isBefore(date, today) && !isSameDay(date, today);
+    if (isPast) {
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 500);
+      onError();
+      return;
+    }
+    onChange(format(date, 'yyyy-MM-dd'));
+    setIsOpen(false);
+  };
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(monthStart);
@@ -93,25 +123,26 @@ const InteractiveDatePicker: React.FC<InteractiveDatePickerProps> = ({ value, on
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
 
-  const handleDateSelect = (date: Date) => {
-    if (isBefore(date, today) && !isSameDay(date, today)) return;
-    onChange(format(date, 'yyyy-MM-dd'));
-    setIsOpen(false);
-  };
-
   return (
     <div className="relative" ref={popoverRef}>
-      <button
+      <motion.button
         type="button"
+        animate={isShaking ? { x: [-4, 4, -4, 4, 0], transition: { duration: 0.4 } } : { x: 0 }}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full h-12 bg-white/[0.03] border border-white/10 rounded-2xl pl-11 pr-4 text-sm text-white flex items-center justify-between focus:border-amber-500/50 focus:bg-white/[0.05] outline-none transition-all hover:border-white/20 group"
+        className={cn(
+          "w-full h-12 bg-white/[0.03] border rounded-2xl pl-11 pr-4 text-sm text-white flex items-center justify-between outline-none transition-all group relative overflow-hidden",
+          isShaking 
+            ? "border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)]" 
+            : "border-white/10 hover:border-white/20 focus:border-amber-500/50 focus:bg-white/[0.05]"
+        )}
       >
-        <Calendar size={14} className="absolute left-4 text-white/20 group-hover:text-amber-500 transition-colors" />
-        <span className={value ? "text-white" : "text-white/20"}>
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        <Calendar size={14} className={cn("absolute left-4 transition-colors", isShaking ? "text-red-500" : "text-white/20 group-hover:text-amber-500")} />
+        <span className={cn("font-medium", value ? "text-white" : "text-white/20")}>
           {value ? format(new Date(value), 'PPP') : "Select date"}
         </span>
         <ChevronRight size={14} className={cn("text-white/20 transition-transform", isOpen && "rotate-90 text-amber-500")} />
-      </button>
+      </motion.button>
 
       <AnimatePresence>
         {isOpen && (
@@ -163,10 +194,11 @@ const InteractiveDatePicker: React.FC<InteractiveDatePickerProps> = ({ value, on
                     type="button"
                     disabled={isPast || !isCurrentMonth}
                     onClick={() => handleDateSelect(date)}
+                    title={isPast ? "Past reservations are not allowed" : ""}
                     className={cn(
                       "h-9 rounded-xl flex items-center justify-center text-[11px] font-bold transition-all relative group",
                       !isCurrentMonth && "opacity-0 pointer-events-none",
-                      isPast && "text-white/10 cursor-not-allowed",
+                      isPast && "text-white/5 cursor-not-allowed bg-white/[0.01]",
                       isSelected 
                         ? "bg-amber-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.3)]" 
                         : isCurrentMonth && !isPast && "hover:bg-white/5 text-white/60 hover:text-white"
@@ -175,6 +207,11 @@ const InteractiveDatePicker: React.FC<InteractiveDatePickerProps> = ({ value, on
                     {format(date, 'd')}
                     {isToday(date) && !isSelected && (
                       <div className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-500" />
+                    )}
+                    {isPast && (
+                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="bg-black/80 text-[6px] text-white px-1 py-0.5 rounded whitespace-nowrap">PAST</div>
+                       </div>
                     )}
                   </button>
                 );
@@ -190,7 +227,7 @@ const InteractiveDatePicker: React.FC<InteractiveDatePickerProps> = ({ value, on
 interface StyledSelectProps {
   value: string;
   onChange: (value: string) => void;
-  options: string[] | { value: string; label: string }[];
+  options: string[] | { value: string; label: string; disabled?: boolean }[];
   icon: React.ReactNode;
   placeholder?: string;
   className?: string;
@@ -217,17 +254,21 @@ const StyledSelect: React.FC<StyledSelectProps> = ({ value, onChange, options, i
   }, [value, options, placeholder]);
 
   return (
-    <div className={cn("relative w-full", className)} ref={containerRef}>
+    <div className="relative w-full" ref={containerRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full h-12 bg-white/[0.03] border border-white/10 rounded-2xl pl-11 pr-4 text-sm text-white flex items-center justify-between focus:border-amber-500/50 focus:bg-white/[0.05] outline-none transition-all hover:border-white/20 group"
+        className={cn(
+          "w-full h-12 bg-white/[0.03] border rounded-2xl pl-11 pr-4 text-sm text-white flex items-center justify-between outline-none transition-all group",
+          !className && "border-white/10 focus:border-amber-500/50 focus:bg-white/[0.05] hover:border-white/20",
+          className
+        )}
       >
         <div className="absolute left-4 text-white/20 group-hover:text-amber-500 transition-colors">
           {icon}
         </div>
-        <span className={value ? "text-white" : "text-white/20"}>{displayLabel}</span>
-        <ChevronRight size={14} className={cn("text-white/20 transition-transform", isOpen && "rotate-90 text-amber-500")} />
+        <span className={cn("truncate mr-2", value ? "text-white" : "text-white/20")}>{displayLabel}</span>
+        <ChevronRight size={14} className={cn("text-white/20 transition-transform shrink-0", isOpen && "rotate-90 text-amber-500")} />
       </button>
 
       <AnimatePresence>
@@ -242,24 +283,29 @@ const StyledSelect: React.FC<StyledSelectProps> = ({ value, onChange, options, i
               {options.map((opt) => {
                 const optValue = typeof opt === 'string' ? opt : opt.value;
                 const optLabel = typeof opt === 'string' ? opt : opt.label;
+                const isDisabled = typeof opt === 'string' ? false : opt.disabled;
                 const isSelected = optValue === value;
 
                 return (
                   <button
                     key={optValue}
                     type="button"
+                    disabled={isDisabled}
                     onClick={() => {
                       onChange(optValue);
                       setIsOpen(false);
                     }}
                     className={cn(
-                      "w-full px-4 py-3 rounded-xl text-left text-sm font-bold transition-all",
+                      "w-full px-4 py-3 rounded-xl text-left text-sm font-bold transition-all flex items-center justify-between",
                       isSelected 
                         ? "bg-amber-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.3)]" 
-                        : "text-white/60 hover:bg-white/5 hover:text-white"
+                        : isDisabled
+                          ? "text-white/10 cursor-not-allowed bg-white/[0.01]"
+                          : "text-white/60 hover:bg-white/5 hover:text-white"
                     )}
                   >
-                    {optLabel}
+                    <span className="truncate">{optLabel}</span>
+                    {isDisabled && <span className="text-[8px] opacity-40 uppercase tracking-tighter">Past</span>}
                   </button>
                 );
               })}
@@ -272,12 +318,29 @@ const StyledSelect: React.FC<StyledSelectProps> = ({ value, onChange, options, i
 };
 
 
-const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClose, initialDate }) => {
+const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClose, initialDate, initialData }) => {
   const { user, userData } = useAuth();
   const { outlet } = useOutlet();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  const [warningMessage, setWarningMessage] = useState("");
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [isTimeShaking, setIsTimeShaking] = useState(false);
   const [step, setStep] = useState(1);
+  const [availabilityStatus, setAvailabilityStatus] = useState<'checking' | 'available' | 'booked' | 'limited'>('available');
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+
+  // Auto-update current time every minute
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const triggerWarning = (msg: string = "Sorry! Can't make reservation for past date or time.") => {
+    setWarningMessage(msg);
+    setShowWarning(true);
+  };
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [menuSearch, setMenuSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -299,42 +362,55 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
     selectedTables: [] as string[],
     sectionId: '',
     notes: '',
+    internalNotes: '',
+    diningPreferences: [] as string[],
+    foodPreferences: [] as string[],
     specialRequests: '',
     preorderItems: [] as PreOrderItem[],
+    tags: [] as string[],
     totalAmount: 0,
     totalItems: 0,
-    status: 'pending'
+    status: 'Confirmed',
+    isVIP: false
   });
 
   const categories = ['All', 'Starters', 'Main Course', 'Desserts', 'Drinks', 'High Tea', 'Beverages'];
 
-  // Re-sync date when initialDate changes
+  // Re-sync date when initialDate or initialData changes
   useEffect(() => {
-    if (initialDate && isOpen) {
-      setFormData(prev => ({ ...prev, date: initialDate }));
+    if (isOpen) {
+      if (initialData) {
+        setFormData({
+          ...initialData,
+          guests: initialData.guests?.toString() || '2',
+        });
+        setStep(1);
+      } else if (initialDate) {
+        setFormData(prev => ({ ...prev, date: initialDate }));
+      }
     }
     if (!isOpen) {
       setStep(1);
       setSuccess(false);
     }
-  }, [initialDate, isOpen]);
+  }, [initialDate, initialData, isOpen]);
 
   useEffect(() => {
     if (!isOpen || !user || !userData) return;
     
     // Fetch Menu Items
-    const qMenu = query(collection(db, 'menuItems'), where('availability', '==', true));
+    const qMenu = query(collection(db, 'menuItems'), where('isAvailable', '==', true));
     const unsubMenu = onSnapshot(qMenu, (snap) => {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as MenuItem));
       if (items.length === 0) {
         // Fallback mockup if database is empty - following user's menu structure
         setMenuItems([
-          { id: '1', name: 'Chicken Biryani', category: 'Main Course', price: 450, availability: true, type: 'non-veg' },
-          { id: '2', name: 'Paneer Tikka', category: 'Starters', price: 320, availability: true, type: 'veg' },
-          { id: '3', name: 'Truffle Pasta', category: 'Main Course', price: 580, availability: true, type: 'veg' },
-          { id: '4', name: 'Chocolate Lava Cake', category: 'Desserts', price: 250, availability: true, type: 'veg' },
-          { id: '5', name: 'Vintage Red Wine', category: 'Beverages', price: 1200, availability: true, type: 'veg' },
-          { id: '6', name: 'Cold Coffee', category: 'Beverages', price: 180, availability: true, type: 'veg' },
+          { id: '1', name: 'Chicken Biryani', category: 'Main Course', price: 450, isAvailable: true, type: 'non-veg' },
+          { id: '2', name: 'Paneer Tikka', category: 'Starters', price: 320, isAvailable: true, type: 'veg' },
+          { id: '3', name: 'Truffle Pasta', category: 'Main Course', price: 580, isAvailable: true, type: 'veg' },
+          { id: '4', name: 'Chocolate Lava Cake', category: 'Desserts', price: 250, isAvailable: true, type: 'veg' },
+          { id: '5', name: 'Vintage Red Wine', category: 'Beverages', price: 1200, isAvailable: true, type: 'veg' },
+          { id: '6', name: 'Cold Coffee', category: 'Beverages', price: 180, isAvailable: true, type: 'veg' },
         ]);
       } else {
         setMenuItems(items);
@@ -363,22 +439,61 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
       .flatMap(r => r.selectedTables || [r.tableSelection]);
   }, [existingReservations, formData.session]);
 
+  // Real-time Availability Logic Simulation
+  useEffect(() => {
+    if ((step === 2 || step === 3) && formData.date) {
+      setIsCheckingAvailability(true);
+      setAvailabilityStatus('checking');
+      
+      const timer = setTimeout(() => {
+        // Logic: Check if selected tables are still available
+        const isTableStillAvailable = formData.selectedTables.every(t => !bookedTables.includes(t));
+        const bookingRatio = bookedTables.length / ALL_TABLES.length;
+
+        if (!isTableStillAvailable && formData.selectedTables.length > 0) {
+          setAvailabilityStatus('booked');
+        } else if (bookingRatio > 0.8) {
+          setAvailabilityStatus('limited');
+        } else {
+          setAvailabilityStatus('available');
+        }
+        setIsCheckingAvailability(false);
+      }, 800); // Simulated delay for "real-time" feel
+
+      return () => clearTimeout(timer);
+    }
+  }, [formData.date, formData.time, formData.session, formData.selectedTables, bookedTables, step]);
+
   const handleSubmit = async () => {
+    // Re-validate just in case
+    if (isDateTimePast(formData.date, formData.time)) {
+      triggerWarning();
+      return;
+    }
+
     setLoading(true);
     try {
       const reservationData = {
         ...formData,
+        userId: user?.uid,
         guests: parseInt(formData.guests),
         preorders: formData.preorderItems.map(i => `${i.qty}x ${i.name}`).join(', '), // Compatibility with ticket view
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
       
-      const docRef = await addDoc(collection(db, 'reservations'), reservationData);
-      setReservationId(docRef.id);
+      if (initialData?.id) {
+        await updateDoc(doc(db, 'reservations', initialData.id), reservationData);
+        setReservationId(initialData.id);
+      } else {
+        const docRef = await addDoc(collection(db, 'reservations'), {
+          ...reservationData,
+          createdAt: serverTimestamp()
+        });
+        setReservationId(docRef.id);
+      }
       setSuccess(true);
     } catch (error) {
-      console.error("Error adding reservation:", error);
+      console.error("Error saving reservation:", error);
     } finally {
       setLoading(false);
     }
@@ -448,18 +563,45 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
   const nextStep = () => {
     if (step === 1 && (!formData.date || !formData.session || !formData.reservationType)) return;
     if (step === 2 && formData.selectedTables.length === 0) return;
-    if (step === 3 && (!formData.guestName.trim() || !formData.time || !formData.guests || !formData.phone.trim())) return;
+    if (step === 3) {
+      if (!formData.guestName.trim() || !formData.time || !formData.guests || !formData.phone.trim()) return;
+      
+      // Final validation before leaving guest details step
+      if (isDateTimePast(formData.date, formData.time)) {
+        setIsTimeShaking(true);
+        setTimeout(() => setIsTimeShaking(true), 500);
+        triggerWarning();
+        return;
+      }
+    }
     setStep(prev => prev + 1);
   };
 
   const isStepValid = useMemo(() => {
-    if (step === 1) return formData.date && formData.session && formData.reservationType;
-    if (step === 2) return formData.selectedTables.length > 0;
-    if (step === 3) return formData.guestName.trim() && formData.time && formData.guests && formData.phone.trim();
-    if (step === 4) return true; // Pre-orders are optional
-    if (step === 5) return true;
+    if (step === 1) {
+      return formData.date && formData.session && formData.reservationType && !isDateTimePast(formData.date, '23:59'); // Basic date check
+    }
+    if (step === 2) return formData.selectedTables.length > 0 && availabilityStatus !== 'booked';
+    if (step === 3) {
+      return formData.guestName.trim() && formData.time && formData.guests && formData.phone.trim() && !isDateTimePast(formData.date, formData.time) && availabilityStatus !== 'booked';
+    }
+    if (step === 4) return true;
+    if (step === 5) return !isDateTimePast(formData.date, formData.time) && availabilityStatus !== 'booked';
     return false;
-  }, [step, formData]);
+  }, [step, formData, currentTime, availabilityStatus]);
+
+  // Prevent past time selection automatically
+  useEffect(() => {
+    if (formData.date && formData.time && isDateTimePast(formData.date, formData.time)) {
+      // If it's today and time is past, we don't automatically reset because it's jarring, 
+      // but we disable progress via isStepValid.
+      // However, if date is in the past, reset date to today.
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      if (isBefore(parse(formData.date, 'yyyy-MM-dd', new Date()), startOfToday())) {
+         setFormData(prev => ({ ...prev, date: todayStr }));
+      }
+    }
+  }, [formData.date, formData.time]);
   const prevStep = () => setStep(prev => prev - 1);
 
   const handleDownloadImage = async () => {
@@ -587,7 +729,20 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
             </div>
 
             {/* Content View */}
-            <div className="max-h-[75vh] overflow-y-auto no-scrollbar">
+            <div className="max-h-[75vh] overflow-y-auto no-scrollbar relative">
+              {/* Floating Live Indicator */}
+              {!success && (
+                <div className="sticky top-0 z-[60] bg-black/60 backdrop-blur-md border-b border-white/5 px-8 py-2 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Calendar size={10} className="text-amber-500" />
+                    <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">Today: {format(currentTime, 'dd MMM yyyy')}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock size={10} className="text-amber-500" />
+                    <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">Live: {format(currentTime, 'hh:mm a')}</span>
+                  </div>
+                </div>
+              )}
               {success ? (
                 <div className="p-8 space-y-8">
                   <div className="flex justify-center flex-col items-center gap-6">
@@ -713,10 +868,10 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                               <MessageCircle size={22} />
                            </button>
                            <button onClick={() => shareToPlatform('instagram')} className="h-14 bg-pink-500/10 hover:bg-pink-500/20 text-pink-500 rounded-2xl flex items-center justify-center transition-all">
-                              <Instagram size={22} />
+                              <Globe size={22} />
                            </button>
                            <button onClick={() => shareToPlatform('facebook')} className="h-14 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 rounded-2xl flex items-center justify-center transition-all">
-                              <Facebook size={22} />
+                              <Share size={22} />
                            </button>
                            <button onClick={() => shareToPlatform('messenger')} className="h-14 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 rounded-2xl flex items-center justify-center transition-all">
                               <Send size={22} />
@@ -736,6 +891,7 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                           <InteractiveDatePicker 
                             value={formData.date} 
                             onChange={date => setFormData({...formData, date})} 
+                            onError={() => triggerWarning("Past dates are not allowed for reservations.")}
                           />
                         </div>
                         <div className="space-y-2">
@@ -786,6 +942,27 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
 
                   {step === 2 && (
                     <div className="space-y-6">
+                      <div className="flex items-center justify-between px-2">
+                        <div className="flex items-center gap-2">
+                          {isCheckingAvailability ? (
+                            <Loader2 size={12} className="text-amber-500 animate-spin" />
+                          ) : (
+                            <div className={cn("w-2 h-2 rounded-full", 
+                              availabilityStatus === 'available' ? "bg-emerald-500" :
+                              availabilityStatus === 'limited' ? "bg-amber-500" : "bg-red-500"
+                            )} />
+                          )}
+                          <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                            {isCheckingAvailability ? "Synchronizing Availability..." : 
+                             availabilityStatus === 'available' ? "Tables Available" :
+                             availabilityStatus === 'limited' ? "Few Tables Remaining" : "Table Conflict Detected"}
+                          </span>
+                        </div>
+                        {availabilityStatus === 'booked' && (
+                          <span className="text-[9px] font-bold text-red-500 uppercase">Selection Taken</span>
+                        )}
+                      </div>
+
                       {formData.reservationType === 'section' ? (
                         <div className="grid grid-cols-1 gap-4">
                           {SECTIONS.map(sec => {
@@ -886,8 +1063,50 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                         <div className="space-y-2">
                           <label className={labelClasses}>Time *</label>
                           <div className="relative">
-                            <Clock size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
-                            <input required type="time" className={inputClasses} value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} />
+                            <motion.div
+                              animate={isTimeShaking ? { x: [-4, 4, -4, 4, 0], transition: { duration: 0.4 } } : { x: 0 }}
+                            >
+                              <StyledSelect 
+                                value={formData.time} 
+                                onChange={value => setFormData({...formData, time: value})}
+                                options={Array.from({ length: 48 }).map((_, i) => {
+                                  const hour = Math.floor(i / 2);
+                                  const min = (i % 2) * 30;
+                                  const timeStr = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+                                  const isPast = isDateTimePast(formData.date, timeStr);
+                                  return { 
+                                    value: timeStr, 
+                                    label: `${hour % 12 || 12}:${min.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}${isPast ? ' (Past)' : ''}`,
+                                    disabled: isPast
+                                  };
+                                })}
+                                icon={<Clock size={14} className={isTimeShaking ? "text-red-500" : "text-white/20"} />}
+                                className={cn(
+                                  isTimeShaking && "border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.1)] rounded-2xl",
+                                  availabilityStatus === 'booked' && "border-red-500/50"
+                                )}
+                              />
+                            </motion.div>
+                            <div className="mt-2 flex items-center justify-between px-1">
+                               <div className="flex items-center gap-2">
+                                  {isCheckingAvailability ? (
+                                    <Loader2 size={10} className="text-amber-500 animate-spin" />
+                                  ) : (
+                                    <div className={cn("w-1.5 h-1.5 rounded-full", 
+                                      availabilityStatus === 'available' ? "bg-emerald-500" :
+                                      availabilityStatus === 'limited' ? "bg-amber-500" : "bg-red-500"
+                                    )} />
+                                  )}
+                                  <span className="text-[8px] font-black uppercase tracking-widest text-white/30">
+                                    {isCheckingAvailability ? "Checking..." : availabilityStatus}
+                                  </span>
+                               </div>
+                               {availabilityStatus === 'booked' && (
+                                  <span className="text-[8px] font-bold text-red-500 uppercase flex items-center gap-1">
+                                    <AlertCircle size={8} /> Slot Mixed
+                                  </span>
+                               )}
+                            </div>
                           </div>
                         </div>
                         <div className="space-y-2">
@@ -956,50 +1175,42 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                       </div>
 
                       {/* Items Grid */}
-                      <div className="grid grid-cols-1 gap-4">
+                      <div className="grid grid-cols-1 gap-2">
                         {filteredMenu.map(item => {
                           const quantity = formData.preorderItems.find(i => i.itemId === item.id)?.qty || 0;
                           return (
-                            <div key={item.id} className="p-4 rounded-3xl bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all">
-                              <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center relative overflow-hidden">
-                                  {item.image ? (
-                                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <Coffee size={24} className="text-white/10" />
-                                  )}
+                            <div key={item.id} className="px-5 py-3 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all">
+                              <div className="flex-1 min-w-0 mr-4">
+                                <div className="flex items-center gap-2 mb-0.5">
                                   <div className={cn(
-                                    "absolute top-1 left-1 w-2 h-2 rounded-full",
+                                    "w-1.5 h-1.5 rounded-full shrink-0",
                                     item.type === 'veg' ? "bg-emerald-500" : "bg-red-500"
                                   )} />
+                                  <h4 className="text-[13px] font-black text-white truncate uppercase tracking-tight">{item.name}</h4>
                                 </div>
-                                <div>
-                                  <h4 className="text-sm font-black text-white">{item.name}</h4>
-                                  <p className="text-[10px] font-bold text-amber-500/80 tracking-widest uppercase">₹{item.price}</p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[8px] font-black uppercase text-white/20 bg-white/5 px-2 py-0.5 rounded-full">{item.category}</span>
-                                    {item.type === 'veg' && <Leaf size={10} className="text-emerald-500" />}
-                                  </div>
+                                <div className="flex items-center gap-3">
+                                  <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest leading-none">₹{item.price}</p>
+                                  <span className="text-[8px] font-black uppercase text-white/20 bg-white/5 px-2 py-0.5 rounded-md leading-none">{item.category}</span>
                                 </div>
                               </div>
                               
-                              <div className="flex items-center gap-3 bg-white/5 p-1 rounded-2xl border border-white/5">
+                              <div className="flex items-center gap-2 bg-white/5 p-0.5 rounded-xl border border-white/5 shadow-inner">
                                 <button 
                                   onClick={() => handleUpdatePreorder(item, -1)}
                                   disabled={quantity === 0}
                                   className={cn(
-                                    "w-8 h-8 rounded-xl flex items-center justify-center transition-all",
+                                    "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
                                     quantity > 0 ? "bg-white/10 text-white hover:bg-white/20" : "text-white/10 cursor-not-allowed"
                                   )}
                                 >
-                                  <Minus size={14} />
+                                  <Minus size={12} />
                                 </button>
-                                <span className={cn("text-xs font-black min-w-[20px] text-center", quantity > 0 ? "text-white" : "text-white/20")}>{quantity}</span>
+                                <span className={cn("text-[11px] font-black min-w-[18px] text-center", quantity > 0 ? "text-white" : "text-white/20 font-mono")}>{quantity}</span>
                                 <button 
                                   onClick={() => handleUpdatePreorder(item, 1)}
-                                  className="w-8 h-8 rounded-xl bg-amber-500 text-black flex items-center justify-center hover:bg-amber-400 transition-all shadow-lg shadow-amber-500/20"
+                                  className="w-7 h-7 rounded-lg bg-amber-500 text-black flex items-center justify-center hover:bg-amber-400 transition-all shadow-md shadow-amber-500/20"
                                 >
-                                  <Plus size={14} />
+                                  <Plus size={12} />
                                 </button>
                               </div>
                             </div>
@@ -1135,6 +1346,11 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
         </motion.div>
         </div>
       )}
+      <ValidationWarningModal 
+        isOpen={showWarning} 
+        onClose={() => setShowWarning(false)} 
+        message={warningMessage}
+      />
     </AnimatePresence>
   );
 };

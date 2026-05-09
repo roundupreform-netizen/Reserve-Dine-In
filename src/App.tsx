@@ -10,13 +10,52 @@ import MenuManagement from './views/ManagementViews/MenuManagement';
 import OutletManagement from './views/ManagementViews/OutletManagement';
 import { PreOrdersView, HighTeaView, ReportsView } from './views/PlaceholderViews';
 import { AnimatePresence, motion } from 'motion/react';
+import { format } from 'date-fns';
 import NewReservationModal from './components/modals/NewReservationModal';
+import { Toaster } from 'react-hot-toast';
+import AIOrb from './components/8848/AIOrb';
+import DiagnosticEngine from './components/8848/DiagnosticEngine';
+import WalkthroughEngine from './components/8848/WalkthroughEngine';
+import { useAIContextSync } from './hooks/use8848';
+import { useAIStore } from './store/useAIStore';
 
 function App() {
   const { user, userData, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<NavItem>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isNewReservationModalOpen, setIsNewReservationModalOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  
+  // AI Context Synchronization
+  const { updateContext } = useAIContextSync(
+    activeTab, 
+    isNewReservationModalOpen ? 'new_reservation' : null
+  );
+
+  // AI Action Listener
+  useEffect(() => {
+    const unsubscribe = useAIStore.subscribe((state) => {
+      const lastAction = state.messages[state.messages.length - 1]?.actions?.[0];
+      if (!lastAction) return;
+
+      switch (lastAction.type) {
+        case 'navigate':
+          if (lastAction.params?.page) {
+            setActiveTab(lastAction.params.page as NavItem);
+          }
+          break;
+        case 'openModal':
+          if (lastAction.params?.modalName === 'new_reservation') {
+            setIsNewReservationModalOpen(true);
+          }
+          break;
+        case 'closeModal':
+          setIsNewReservationModalOpen(false);
+          break;
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   if (loading) {
     return (
@@ -30,18 +69,32 @@ function App() {
     );
   }
 
-  if (!userData) return <AuthScreen />;
+  // skip auth check for now as requested
+  // if (!userData) return <AuthScreen />;
 
   const renderContent = () => {
-    const props = { onNewReservation: () => setIsNewReservationModalOpen(true) };
+    const props = { 
+      onNewReservation: () => setIsNewReservationModalOpen(true),
+      selectedDate,
+      setSelectedDate
+    };
     
     switch (activeTab) {
       case 'dashboard': return <DashboardView onNavigate={(tab) => setActiveTab(tab)} {...props} />;
       case 'reservations': return <ReservationsView {...props} />;
-      case 'calendar': return <CalendarView />;
+      case 'calendar': return (
+        <CalendarView 
+          selectedDate={selectedDate} 
+          onDateSelect={(date) => setSelectedDate(date)} 
+          onDateOpen={(date) => { 
+            setSelectedDate(date); 
+            setActiveTab('reservations'); 
+          }} 
+        />
+      );
       case 'tables': return <TableManagement />;
-      case 'dineInMenu': return <MenuManagement />;
-      case 'highTeaMenu': return <MenuManagement />; // Reusing the component but with internal state
+      case 'dineInMenu': return <MenuManagement initialMenuType="dine-in" />;
+      case 'highTeaMenu': return <MenuManagement initialMenuType="high-tea" />; // Correctly passing prop
       case 'outlet': return <OutletManagement />;
       case 'preorders': return <PreOrdersView />;
       case 'hightea': return <HighTeaView />;
@@ -81,6 +134,25 @@ function App() {
       <NewReservationModal 
         isOpen={isNewReservationModalOpen} 
         onClose={() => setIsNewReservationModalOpen(false)} 
+        initialDate={format(selectedDate, 'yyyy-MM-dd')}
+      />
+
+      {/* 8848 METERS AI LAYER */}
+      <DiagnosticEngine />
+      <WalkthroughEngine />
+      <AIOrb />
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: '#0F0F12',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.05)',
+            borderRadius: '1rem',
+            fontSize: '12px',
+            fontFamily: 'inherit',
+          },
+        }}
       />
     </div>
   );

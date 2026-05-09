@@ -3,29 +3,35 @@ import { motion } from 'motion/react';
 import { Utensils, LogIn } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { GlassCard, Button } from '../components/ui/core';
+import Logo8848 from '../components/8848/8848Logo';
+import { useTranslation } from 'react-i18next';
+import { LanguageSwitcher } from '../components/layout/LanguageSwitcher';
 
 export default function AuthScreen() {
   const { login, error } = useAuth();
+  const { t } = useTranslation();
 
   return (
     <div className="min-h-screen bg-[#0A0A0C] flex flex-col items-center justify-center p-6 bg-[radial-gradient(circle_at_20%_20%,_rgba(16,185,129,0.15)_0%,_transparent_40%),_radial-gradient(circle_at_80%_80%,_rgba(59,130,246,0.1)_0%,_transparent_40%)]">
+      <div className="absolute top-8 right-8">
+        <LanguageSwitcher />
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="text-center"
       >
-        <motion.div
-          initial={{ scale: 0.8, rotate: 0 }}
-          animate={{ scale: 1, rotate: 45 }}
-          className="w-20 h-20 bg-emerald-500 rounded-3xl flex items-center justify-center shadow-[0_10px_40px_rgba(16,185,129,0.4)] mb-8 mx-auto"
-        >
-          <div className="w-10 h-10 border-white -rotate-45 flex items-center justify-center" style={{ borderStyle: 'solid', borderRadius: '200px', borderWidth: '3.6px' }}>
-            <div className="w-2 h-2 bg-white rounded-full"></div>
-          </div>
-        </motion.div>
+        <Logo8848 
+          size={120} 
+          glow 
+          pulse 
+          animated 
+          className="mx-auto mb-8"
+        />
         
         <h1 className="text-5xl font-bold tracking-tighter text-white mb-2 italic">Reserve Dine In</h1>
-        <p className="text-white/30 text-[10px] uppercase tracking-[0.4em] font-bold mb-12">Managed by Everest Developers</p>
+        <p className="text-white/30 text-[10px] uppercase tracking-[0.4em] font-bold mb-12">{t('ai.poweredBy', 'Powered by 8848 Meters Intelligence')}</p>
 
         {error && (
           <motion.div 
@@ -44,14 +50,14 @@ export default function AuthScreen() {
             onClick={login}
           >
             <LogIn size={20} />
-            Secure Login
+            {t('common.login', 'Secure Login')}
           </Button>
           
           <p 
             className="text-[9px] uppercase tracking-[0.3em] font-bold mt-8"
             style={{ textAlign: 'center', fontStyle: 'normal', textDecoration: 'none', fontWeight: 'normal', borderColor: '#010101', borderRadius: '1px', borderWidth: '1px', borderStyle: 'groove', backgroundColor: '#040500' }}
           >
-            Internal Management Access
+            {t('common.internalAccess', 'Internal Management Access')}
           </p>
         </div>
       </motion.div>

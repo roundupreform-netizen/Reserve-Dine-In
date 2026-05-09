@@ -33,7 +33,7 @@
     },
     "Reservation": {
       "title": "Reservation",
-      "description": "Enhanced reservation details",
+      "description": "Enhanced reservation details with history and tracking",
       "type": "object",
       "properties": {
         "guestName": { "type": "string" },
@@ -42,13 +42,41 @@
         "date": { "type": "string", "format": "date" },
         "time": { "type": "string" },
         "session": { "type": "string" },
+        "reservationType": { "type": "string", "enum": ["section", "table"] },
         "tableId": { "type": "string" },
         "sectionId": { "type": "string" },
         "hallId": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "confirmed", "seated", "cancelled", "completed", "VIP"] },
+        "outletId": { "type": "string" },
+        "status": { "type": "string" },
+        "isVIP": { "type": "boolean" },
         "notes": { "type": "string" },
-        "preorderIds": { "type": "array", "items": { "type": "string" } },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "internalNotes": { "type": "string" },
+        "preorders": { "type": "string" },
+        "history": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "action": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "timestamps": {
+          "type": "object",
+          "properties": {
+            "arrivedAt": { "type": "string" },
+            "seatedAt": { "type": "string" },
+            "diningAt": { "type": "string" },
+            "completedAt": { "type": "string" },
+            "cancelledAt": { "type": "string" },
+            "postponedAt": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
       },
       "required": ["guestName", "phone", "date", "status"]
     },
@@ -84,16 +112,23 @@
     },
     "MenuItem": {
       "title": "MenuItem",
-      "description": "Food and beverage items",
+      "description": "Enhanced food and beverage items with detailed metadata",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
         "category": { "type": "string" },
+        "description": { "type": "string" },
         "price": { "type": "number" },
         "image": { "type": "string" },
         "isAvailable": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["Available", "Out of Stock", "Seasonal", "Chef Special", "Hidden"] },
         "type": { "type": "string", "enum": ["veg", "non-veg"] },
-        "menuType": { "type": "string", "enum": ["dine-in", "high-tea"] }
+        "menuType": { "type": "string", "enum": ["dine-in", "high-tea"] },
+        "prepTime": { "type": "string" },
+        "spiceLevel": { "type": "integer" },
+        "allergens": { "type": "array", "items": { "type": "string" } },
+        "isRecommended": { "type": "boolean" },
+        "order": { "type": "integer" }
       }
     }
   },

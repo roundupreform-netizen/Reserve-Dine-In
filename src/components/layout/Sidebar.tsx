@@ -23,7 +23,10 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOutlet } from '../../contexts/OutletContext';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
+import Logo8848 from '../8848/8848Logo';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 export type NavItem = 
   | 'dashboard' 
@@ -48,32 +51,33 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, setIsCollapsed }) => {
   const { userData, logout } = useAuth();
   const { outlet } = useOutlet();
+  const { t } = useTranslation();
 
   const menuGroups = [
     {
-      title: 'Operations',
+      title: t('common.operations', 'Operations'),
       items: [
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'reservations', label: 'Reservations', icon: BookOpen },
-        { id: 'calendar', label: 'Calendar View', icon: CalendarIcon },
-        { id: 'tables', label: 'Table Management', icon: Grid3X3 },
+        { id: 'dashboard', label: t('common.dashboard'), icon: LayoutDashboard },
+        { id: 'reservations', label: t('common.reservations'), icon: BookOpen },
+        { id: 'calendar', label: t('common.calendar', 'Calendar View'), icon: CalendarIcon },
+        { id: 'tables', label: t('common.tables'), icon: Grid3X3 },
       ]
     },
     {
-      title: 'Dining & Menu',
+      title: t('common.diningMenu', 'Dining & Menu'),
       items: [
-        { id: 'preorders', label: 'Pre-Orders', icon: ShoppingCart },
-        { id: 'hightea', label: 'High Tea Events', icon: Bell },
-        { id: 'dineInMenu', label: 'Dine-In Menu', icon: UtensilsCrossed },
-        { id: 'highTeaMenu', label: 'High Tea Menu', icon: Coffee },
+        { id: 'preorders', label: t('common.preorders', 'Pre-Orders'), icon: ShoppingCart },
+        { id: 'hightea', label: t('common.hightea', 'High Tea Events'), icon: Bell },
+        { id: 'dineInMenu', label: t('common.dineInMenu', 'Dine-In Menu'), icon: UtensilsCrossed },
+        { id: 'highTeaMenu', label: t('common.highTeaMenu', 'High Tea Menu'), icon: Coffee },
       ]
     },
     {
-      title: 'Administration',
+      title: t('common.administration', 'Administration'),
       items: [
-        { id: 'outlet', label: 'Outlet Management', icon: Store },
-        { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
-        { id: 'settings', label: 'Settings', icon: Settings },
+        { id: 'outlet', label: t('common.outlet', 'Outlet Management'), icon: Store },
+        { id: 'reports', label: t('common.reports', 'Reports & Analytics'), icon: BarChart3 },
+        { id: 'settings', label: t('common.settings'), icon: Settings },
       ]
     }
   ];
@@ -94,12 +98,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, 
             "w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0 transition-all",
             outlet?.logo 
               ? "bg-transparent" 
-              : "bg-gradient-to-br from-amber-400 to-amber-600 text-black shadow-[0_0_20px_rgba(251,191,36,0.3)]"
+              : "bg-black/40 border border-white/5 shadow-xl"
           )}>
             {outlet?.logo ? (
               <img src={outlet.logo} alt="Outlet logo" className="w-full h-full object-contain p-1" />
             ) : (
-              <Zap size={22} fill="currentColor" />
+              <Logo8848 size={32} glow={false} animated={false} pulse={false} />
             )}
           </div>
           <AnimatePresence>
@@ -178,6 +182,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, 
         </div>
 
         <div className="flex items-center gap-2">
+          {!isCollapsed && <LanguageSwitcher />}
           <button 
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 transition-colors"

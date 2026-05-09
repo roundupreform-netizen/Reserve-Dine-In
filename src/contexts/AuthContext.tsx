@@ -2,7 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   onAuthStateChanged, 
   User, 
-  signOut 
+  signOut,
+  signInAnonymously
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
@@ -17,8 +18,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const AUTHORIZED_EMAIL = 'roundupreform@gmail.com';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -52,7 +51,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (err) {
           console.error("Error fetching user data:", err);
-          // Fallback if firestore fails but auth succeeded
           setUserData({
             uid: firebaseUser.uid,
             email: firebaseUser.email,
@@ -61,8 +59,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
         }
       } else {
-        setUser(null);
-        setUserData(null);
+        // MOCK BYPASS: When not logged in, provide a persistent mock admin
+        setUser({
+          uid: 'mock-admin-id',
+          email: 'admin@everest.dev',
+          displayName: 'System Admin',
+          emailVerified: true,
+          isAnonymous: false,
+        } as any);
+        setUserData({
+          uid: 'mock-admin-id',
+          email: 'admin@everest.dev',
+          displayName: 'System Admin',
+          role: 'admin'
+        });
       }
       setLoading(false);
       setIsSigningIn(false);
@@ -75,24 +85,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     setIsSigningIn(true);
     try {
-      const { signInAnonymously } = await import('firebase/auth');
-      await signInAnonymously(auth);
+      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
     } catch (error: any) {
       console.error('Login error:', error);
-      if (error.code === 'auth/admin-restricted-operation') {
-        // Fallback to local session to allow UI exploration
-        const demoUser = {
-          uid: 'demo-guest-' + Math.random().toString(36).substr(2, 9),
-          email: 'guest@tablepro.demo',
-          displayName: 'Guest Admin (Demo Mode)',
-          role: 'admin'
-        };
-        setUserData(demoUser);
-        console.warn('Anonymous Auth is disabled in Firebase Console. Entering Demo Mode with local state. To use real data, enable "Anonymous" in Firebase Console > Authentication > Sign-in method.');
-        setError('Anonymous login restricted. Enabled Demo Mode. To use real cloud storage, enable "Anonymous" in Firebase Console.');
-      } else {
-        setError('Failed to log in. Please try again.');
-      }
+      setError('Failed to log in with Google.');
     } finally {
       setIsSigningIn(false);
     }
@@ -104,8 +102,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Logout error:', error);
     }
-    setUser(null);
-    setUserData(null);
   };
 
   return (

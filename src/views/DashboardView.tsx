@@ -11,7 +11,7 @@ import {
   Activity,
   Star,
   Plus,
-  Utensils,
+  Utensils as UtensilsIcon,
   Coffee,
   ShoppingBag,
   Truck,
@@ -30,19 +30,10 @@ import {
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
-import { collection, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
-} from 'recharts';
+import { collection, onSnapshot, query, where, Timestamp, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { Toast, ToastType } from '../components/ui/Toast';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { format, isToday } from 'date-fns';
 
 // --- Types ---
 interface Reservation {
@@ -53,7 +44,7 @@ interface Reservation {
   date: string;
   time: string;
   session: string;
-  status: 'pending' | 'confirmed' | 'seated' | 'cancelled' | 'completed' | 'VIP';
+  status: 'Pending' | 'Confirmed' | 'Arrived' | 'Seated' | 'Dining' | 'Completed' | 'Cancelled' | 'Postponed' | 'No Show' | 'VIP';
   tableId?: string;
   serviceType?: 'dine-in' | 'takeaway' | 'delivery' | 'high-tea';
   preorderItems?: any[];
@@ -177,13 +168,29 @@ const CircularProgress = ({ value, label, sublabel }: any) => {
 
 // --- Main View ---
 
-const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: any) => void, onNewReservation?: () => void }) => {
+const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelectedDate }: { 
+  onNavigate?: (item: any) => void, 
+  onNewReservation?: () => void,
+  selectedDate: Date,
+  setSelectedDate: (date: Date) => void
+}) => {
   const { user, userData } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  const [crmSearch, setCrmSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('Active');
+  const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
+    message: '',
+    type: 'success',
+    visible: false,
+  });
+
+  const showToast = (message: string, type: ToastType = 'success') => {
+    setToast({ message, type, visible: true });
+  };
   
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => format(selectedDate, 'yyyy-MM-dd'), [selectedDate]);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'reservations'), (snap) => {
@@ -199,7 +206,7 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
     const takeaway = today.filter(r => r.serviceType === 'takeaway' || (!r.serviceType && r.session === 'Takeaway')); 
     const delivery = today.filter(r => r.serviceType === 'delivery');
     const highTea = today.filter(r => r.session === 'Snacks' || r.session === 'High Tea');
-    const occupancy = Math.min(100, Math.round(((today.filter(r => ['seated', 'confirmed'].includes(r.status)).length) / 24) * 100));
+    const occupancy = Math.min(100, Math.round(((today.filter(r => ['Arrived', 'Seated', 'Dining'].includes(r.status)).length) / 24) * 100));
 
     const sessions: Record<string, Reservation[]> = {
       Breakfast: today.filter(r => r.session === 'Breakfast'),
@@ -257,6 +264,37 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
     { name: 'Hotel Guest', value: 10, color: '#8b5cf6' }
   ];
 
+  const updateReservationStatus = async (resId: string, newStatus: string) => {
+    try {
+      const res = reservations.find(r => r.id === resId);
+      const timestampField = 
+        newStatus === 'Arrived' ? 'arrivedAt' :
+        newStatus === 'Seated' ? 'seatedAt' :
+        newStatus === 'Dining' ? 'diningAt' :
+        newStatus === 'Completed' ? 'completedAt' : null;
+
+      const updates: any = { 
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      };
+
+      if (timestampField) {
+        updates[`timestamps.${timestampField}`] = new Date().toISOString();
+      }
+
+      // Append to history if it exists or create it
+      const historyEntry = { action: `Status changed to ${newStatus}`, timestamp: new Date().toISOString() };
+      const currentHistory = (res as any)?.history || [];
+      updates.history = [...currentHistory, historyEntry];
+
+      await updateDoc(doc(db, 'reservations', resId), updates);
+      showToast(`Reservation moved to ${newStatus}`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `reservations/${resId}`);
+      showToast('Status update failed', 'error');
+    }
+  };
+
   if (loading) return (
     <div className="flex-1 flex items-center justify-center">
       <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
@@ -279,7 +317,26 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
             >
               {greeting}, <span className="text-emerald-500">{userData?.displayName?.split(' ')[0] || 'Partner'}</span>
             </motion.h1>
-            <p className="text-white/40 text-lg font-medium">Here's what's happening at your outlet today.</p>
+            <div className="flex flex-col gap-1">
+              <p className="text-white/40 text-lg font-medium">Here's what's happening for your selected date.</p>
+              <div className="flex items-center gap-3 mt-4">
+                <div className="px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2">
+                  <Calendar size={14} className="text-amber-500" />
+                  <span className="text-xs font-black text-amber-500 uppercase tracking-widest leading-none">
+                     Log View: {format(selectedDate, 'dd MMMM yyyy')}
+                  </span>
+                </div>
+                {!isToday(selectedDate) && (
+                  <button 
+                    onClick={() => setSelectedDate(new Date())}
+                    className="text-[10px] font-black text-white/20 hover:text-white uppercase tracking-widest transition-colors flex items-center gap-1 group"
+                  >
+                    Switch to Today
+                    <CheckCircle2 size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
           
           <div className="flex flex-wrap items-center gap-4">
@@ -288,6 +345,7 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
               whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(16,185,129,0.4)" }}
               whileTap={{ scale: 0.95 }}
               onClick={onNewReservation}
+              data-tour="new-reservation-btn"
               className="px-8 py-4 bg-emerald-500 text-black rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3 transition-all relative overflow-hidden group shadow-[0_0_20px_rgba(16,185,129,0.2)]"
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
@@ -298,7 +356,7 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
         </header>
 
         {/* Overview Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" data-tour="stats-card">
           <GlassCard onClick={() => setActiveModal('reservations')}>
             <div className="flex flex-col h-full justify-between gap-6">
               <div className="flex justify-between items-start">
@@ -346,7 +404,7 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
             <div className="flex flex-col h-full justify-between gap-6">
               <div className="flex justify-between items-start">
                 <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 ring-1 ring-blue-500/20">
-                  <Utensils size={28} />
+                  <UtensilsIcon size={28} />
                 </div>
               </div>
               <div className="space-y-1">
@@ -554,7 +612,216 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
             </div>
           </div>
         </div>
+        {/* Master Reservation CRM Section */}
+        <section className="pt-12 border-t border-white/5 pb-20">
+          <div className="flex flex-col lg:flex-row justify-between items-end gap-6 mb-10">
+            <div className="space-y-1">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20">
+                  <Users size={20} />
+                </div>
+                <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Master CRM Logistics</h2>
+              </div>
+              <p className="text-white/40 text-sm font-medium">Categorized view of active guest stages</p>
+            </div>
+            
+            <div className="flex gap-2 bg-white/5 p-1 rounded-2xl border border-white/5 backdrop-blur-xl">
+              {['Active', 'Confirmed', 'Dining', 'Completed'].map(t => (
+                <button
+                  key={t}
+                  onClick={() => setActiveTab(t)}
+                  className={cn(
+                    "px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                    activeTab === t ? "bg-white/10 text-white shadow-lg" : "text-white/20 hover:text-white/40"
+                  )}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            {['Pending', 'Arrived', 'Seated', 'Dining'].map((stage) => (
+              <div key={stage} className="flex flex-col gap-4">
+                <div className="flex items-center justify-between px-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">{stage} Cycle</h4>
+                  <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-lg">
+                    {stats.today.filter(r => r.status === stage).length}
+                  </span>
+                </div>
+                <div className="space-y-4">
+                  <AnimatePresence mode="popLayout">
+                    {stats.today
+                      .filter(r => r.status === stage)
+                      .map((res) => (
+                        <motion.div
+                          layout
+                          initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                          key={res.id}
+                          className="bg-[#0F0F12] border border-white/5 p-5 rounded-[2rem] group hover:border-emerald-500/20 hover:bg-white/[0.04] transition-all"
+                        >
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/20 font-black">
+                                {res.guestName[0]}
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-black text-white">{res.guestName}</h5>
+                                <p className="text-[10px] text-white/20 font-bold">{res.time}</p>
+                              </div>
+                            </div>
+                            {res.status === 'VIP' && <Crown size={14} className="text-amber-500" fill="currentColor" />}
+                          </div>
+
+                          <div className="flex items-center justify-between text-white/40 text-[10px] font-black uppercase tracking-widest mb-4">
+                            <div className="flex items-center gap-2">
+                              <Users size={12} /> {res.guests} PAX
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <MapPin size={12} /> {res.tableId ? `T-${res.tableId}` : 'NONE'}
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            {stage === 'Pending' && (
+                              <button 
+                                onClick={() => updateReservationStatus(res.id, 'Arrived')}
+                                className="flex-1 h-9 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all"
+                              >
+                                Arrival
+                              </button>
+                            )}
+                            {stage === 'Arrived' && (
+                              <button 
+                                onClick={() => updateReservationStatus(res.id, 'Seated')}
+                                className="flex-1 h-9 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all"
+                              >
+                                Seating
+                              </button>
+                            )}
+                            {stage === 'Seated' && (
+                              <button 
+                                onClick={() => updateReservationStatus(res.id, 'Dining')}
+                                className="flex-1 h-9 bg-pink-500/10 hover:bg-pink-500/20 text-pink-500 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all"
+                              >
+                                dining
+                              </button>
+                            )}
+                            {stage === 'Dining' && (
+                              <button 
+                                onClick={() => updateReservationStatus(res.id, 'Completed')}
+                                className="flex-1 h-9 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all"
+                              >
+                                Complete
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => onNavigate?.('reservations')}
+                              className="w-9 h-9 bg-white/5 hover:bg-white/10 text-white/40 flex items-center justify-center rounded-xl transition-all"
+                            >
+                              <GripVertical size={14} />
+                            </button>
+                          </div>
+                        </motion.div>
+                      ))}
+                  </AnimatePresence>
+                  {stats.today.filter(r => r.status === stage).length === 0 && (
+                    <div className="py-8 text-center border border-dashed border-white/5 rounded-[2rem]">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-white/10">Cycle Empty</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-12 overflow-x-auto bg-[#0F0F12] border border-white/5 rounded-[3rem] shadow-2xl">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-white/5 bg-white/[0.01]">
+                  <th className="px-10 py-6 text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">Guest Dimension</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">Schedule</th>
+                  <th className="px-8 py-6 text-[10px] font-black text-white/20 uppercase tracking-[0.2em]">CRM Status</th>
+                  <th className="px-10 py-6 text-[10px] font-black text-white/20 uppercase tracking-[0.2em] text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {stats.today.filter(r => {
+                  const matchesSearch = r.guestName?.toLowerCase().includes(crmSearch.toLowerCase()) || r.phone?.includes(crmSearch);
+                  if (activeTab === 'Active') return matchesSearch && !['Completed', 'Cancelled'].includes(r.status);
+                  return matchesSearch && r.status === activeTab;
+                }).slice(0, 10).map((res) => (
+                  <tr key={res.id} className="group hover:bg-white/[0.02] transition-colors">
+                    <td className="px-10 py-8">
+                      <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "w-11 h-11 rounded-xl flex items-center justify-center text-white/20 font-black",
+                          res.status === 'VIP' ? "bg-purple-500/10 text-purple-500" : "bg-white/5"
+                        )}>
+                          {res.guestName[0]}
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-white">{res.guestName}</h4>
+                          <p className="text-[10px] text-white/20 uppercase tracking-widest">{res.phone}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-8">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-white/80 text-xs font-black">
+                          <Clock size={12} className="text-emerald-500" />
+                          {res.time}
+                        </div>
+                        <div className="text-[9px] text-white/20 font-black uppercase tracking-widest">{res.session}</div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-8">
+                      <div className={cn(
+                        "inline-flex items-center px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border",
+                        res.status === 'Confirmed' ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
+                        res.status === 'Pending' ? "text-amber-500 bg-amber-500/10 border-amber-500/20" :
+                        res.status === 'Arrived' ? "text-blue-500 bg-blue-500/10 border-blue-500/20" :
+                        res.status === 'Seated' ? "text-indigo-500 bg-indigo-500/10 border-indigo-500/20" :
+                        res.status === 'Dining' ? "text-pink-500 bg-pink-500/10 border-pink-500/20 animate-pulse" :
+                        res.status === 'VIP' ? "text-purple-500 bg-purple-500/20 border-purple-500/30" :
+                        res.status === 'Completed' ? "text-white/20 bg-white/5 border-white/5" :
+                        res.status === 'Cancelled' ? "text-red-500 bg-red-500/10 border-red-500/20" :
+                        "text-white/40 bg-white/5 border-white/5"
+                      )}>
+                        <div className={cn(
+                          "w-1 h-1 rounded-full mr-2", 
+                          res.status === 'Dining' ? "bg-pink-500 animate-ping" : 
+                          res.status === 'Confirmed' ? "bg-emerald-500 animate-pulse" :
+                          "bg-current"
+                        )} />
+                        {res.status}
+                      </div>
+                    </td>
+                    <td className="px-10 py-8 text-right">
+                      <button 
+                        onClick={() => updateReservationStatus(res.id, 'Completed')}
+                        className="px-6 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/20 hover:text-black text-emerald-500 text-[9px] font-black uppercase tracking-widest transition-all"
+                      >
+                        Settle
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
+
+      <Toast 
+        message={toast.message} 
+        type={toast.type} 
+        isVisible={toast.visible} 
+        onClose={() => setToast(prev => ({ ...prev, visible: false }))} 
+      />
 
       {/* --- Modals --- */}
       
@@ -644,7 +911,7 @@ const DashboardView = ({ onNavigate, onNewReservation }: { onNavigate?: (item: a
         isOpen={activeModal === 'takeaway'} 
         onClose={() => setActiveModal(null)}
         title="Takeaway Tracker"
-        icon={Utensils}
+        icon={UtensilsIcon}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {stats.takeaway.map(r => (

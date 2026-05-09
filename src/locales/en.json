@@ -1,0 +1,79 @@
+{
+  "common": {
+    "welcome": "Welcome to 8848 Meters",
+    "dashboard": "Dashboard",
+    "reservations": "Reservations",
+    "tables": "Table Management",
+    "menu": "Menu Management",
+    "settings": "Settings",
+    "logout": "Logout",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "search": "Search...",
+    "loading": "Loading...",
+    "operations": "Operations",
+    "calendar": "Calendar View",
+    "diningMenu": "Dining & Menu",
+    "preorders": "Pre-Orders",
+    "hightea": "High Tea Events",
+    "dineInMenu": "Dine-In Menu",
+    "highTeaMenu": "High Tea Menu",
+    "administration": "Administration",
+    "outlet": "Outlet Management",
+    "reports": "Reports & Analytics",
+    "login": "Secure Login",
+    "internalAccess": "Internal Management Access"
+  },
+  "reservation": {
+    "title": "Reservation Management",
+    "addNew": "Add New Reservation",
+    "edit": "Edit",
+    "status": "Status",
+    "date": "Date",
+    "time": "Time",
+    "guests": "Guests",
+    "name": "Name",
+    "phone": "Phone",
+    "table": "Table",
+    "action": "Action",
+    "statuses": {
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "arrived": "Arrived",
+      "seated": "Seated",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "no-show": "No Show"
+    }
+  },
+  "ai": {
+    "title": "8848 Meters Intelligence",
+    "placeholder": "Ask 8848 Meters anything...",
+    "operator": "Operator",
+    "response": "8848 Meters Intelligence",
+    "thinking": "Analysing...",
+    "listening": "Listening...",
+    "diagnostics": "Operational Diagnostics",
+    "walkthrough": "Guided Walkthrough",
+    "greeting": "Namaste. I am 8848 Meters, your tactical operational intelligence. How can I assist with your restaurant's mountain of tasks today?",
+    "languageDetected": "Language preference updated to English."
+  },
+  "dashboard": {
+    "overview": "Operational Overview",
+    "totalReservations": "Total Reservations",
+    "peakTime": "Peak Time",
+    "activeTables": "Active Tables",
+    "occupancy": "Occupancy"
+  },
+  "tutorial": {
+    "reservations": {
+      "start": "This is where tactical operations begin. Click here to initiate a new reservation.",
+      "customer": "Search for existing patrons or enter a new target's coordinates (details).",
+      "tables": "Allocate a specific tactical zone (table) for this unit."
+    },
+    "dashboard": {
+      "stats": "Daily intelligence summary. Monitor your seated vs pending units."
+    }
+  }
+}
