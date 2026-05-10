@@ -11,9 +11,13 @@ import { useTranslation } from 'react-i18next';
 
 import VoiceAI from './VoiceAI';
 
+import { use8848LanguageStore } from '../../store/8848/use8848LanguageStore';
+import { LanguageSelector8848 } from './8848LanguageSelector';
+
 const AIChatPanel = () => {
   const { messages, addMessage, isThinking, setIsThinking, context, setIsOpen, updateContext } = useAIStore();
   const { startScan } = use8848Diagnostics();
+  const { onboardingCompleted } = use8848LanguageStore();
   const [input, setInput] = useState('');
   const { t, i18n } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -22,7 +26,7 @@ const AIChatPanel = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isThinking]);
+  }, [messages, isThinking, onboardingCompleted]);
 
   const handleSend = async () => {
     if (!input.trim() || isThinking) return;
@@ -97,40 +101,46 @@ const AIChatPanel = () => {
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar p-8 space-y-8">
-        {messages.map((msg, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={cn(
-              "flex flex-col max-w-[85%]",
-              msg.role === 'user' ? "ml-auto items-end" : "items-start"
-            )}
-          >
-            <div className={cn(
-              "p-4 rounded-3xl text-sm leading-relaxed",
-              msg.role === 'user' 
-                ? "bg-amber-500 text-black font-medium rounded-tr-none" 
-                : "bg-white/5 text-white/80 border border-white/5 rounded-tl-none"
-            )}>
-              {msg.content}
-            </div>
-            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest mt-2">
-              {msg.role === 'user' ? t('ai.operator') : t('ai.response')}
-            </span>
-            
-            {msg.actions && msg.actions.length > 0 && (
-              <div className="flex gap-2 mt-3">
-                {msg.actions.map((action: any, ai) => (
-                  <div key={ai} className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-2">
-                    <Target size={10} className="text-emerald-500" />
-                    <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Executing {action.type}</span>
+        {!onboardingCompleted ? (
+          <LanguageSelector8848 />
+        ) : (
+          <>
+            {messages.map((msg, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                  "flex flex-col max-w-[85%]",
+                  msg.role === 'user' ? "ml-auto items-end" : "items-start"
+                )}
+              >
+                <div className={cn(
+                  "p-4 rounded-3xl text-sm leading-relaxed",
+                  msg.role === 'user' 
+                    ? "bg-amber-500 text-black font-medium rounded-tr-none" 
+                    : "bg-white/5 text-white/80 border border-white/5 rounded-tl-none"
+                )}>
+                  {msg.content}
+                </div>
+                <span className="text-[8px] font-black text-white/20 uppercase tracking-widest mt-2">
+                  {msg.role === 'user' ? t('ai.operator') : t('ai.response')}
+                </span>
+                
+                {msg.actions && msg.actions.length > 0 && (
+                  <div className="flex gap-2 mt-3">
+                    {msg.actions.map((action: any, ai) => (
+                      <div key={ai} className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-2">
+                        <Target size={10} className="text-emerald-500" />
+                        <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Executing {action.type}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-          </motion.div>
-        ))}
+                )}
+              </motion.div>
+            ))}
+          </>
+        )}
         {isThinking && (
           <div className="flex flex-col items-start max-w-[85%]">
             <div className="p-6 bg-white/5 border border-white/5 rounded-3xl rounded-tl-none flex items-center gap-3">
@@ -144,50 +154,52 @@ const AIChatPanel = () => {
       </div>
 
       {/* Input */}
-      <div className="p-8 border-t border-white/5 bg-white/[0.02]">
-        <div className="relative">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder={t('ai.placeholder')}
-            className="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-6 pr-24 text-xs font-medium text-white outline-none focus:border-amber-500/50 transition-all placeholder:text-white/20"
-          />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            <VoiceAI />
+      {onboardingCompleted && (
+        <div className="p-8 border-t border-white/5 bg-white/[0.02]">
+          <div className="relative">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder={t('ai.placeholder')}
+              className="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-6 pr-24 text-xs font-medium text-white outline-none focus:border-amber-500/50 transition-all placeholder:text-white/20"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <VoiceAI />
+              <button 
+                onClick={handleSend}
+                className="w-10 h-10 rounded-xl bg-amber-500 text-black flex items-center justify-center hover:bg-amber-400 transition-all shadow-lg shadow-amber-500/20"
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-2 mt-4">
             <button 
-              onClick={handleSend}
-              className="w-10 h-10 rounded-xl bg-amber-500 text-black flex items-center justify-center hover:bg-amber-400 transition-all shadow-lg shadow-amber-500/20"
+              onClick={() => {
+                setIsOpen(false);
+                startScan();
+              }}
+              className="p-3 bg-white/[0.02] border border-white/5 rounded-xl hover:bg-white/5 transition-all text-left flex items-center gap-3 group"
             >
-              <Send size={18} />
+              <Zap size={14} className="text-amber-500" />
+              <span className="text-[9px] font-black text-white/40 uppercase tracking-widest group-hover:text-white">{t('ai.diagnostics')}</span>
+            </button>
+            <button 
+              onClick={() => {
+                setIsOpen(false);
+                window.dispatchEvent(new CustomEvent('8848-show-walkthroughs'));
+              }}
+              className="p-3 bg-white/[0.02] border border-white/5 rounded-xl hover:bg-white/5 transition-all text-left flex items-center gap-3 group"
+            >
+              <Target size={14} className="text-blue-500" />
+              <span className="text-[9px] font-black text-white/40 uppercase tracking-widest group-hover:text-white">{t('ai.walkthrough')}</span>
             </button>
           </div>
         </div>
-        
-        <div className="grid grid-cols-2 gap-2 mt-4">
-          <button 
-            onClick={() => {
-              setIsOpen(false);
-              startScan();
-            }}
-            className="p-3 bg-white/[0.02] border border-white/5 rounded-xl hover:bg-white/5 transition-all text-left flex items-center gap-3 group"
-          >
-            <Zap size={14} className="text-amber-500" />
-            <span className="text-[9px] font-black text-white/40 uppercase tracking-widest group-hover:text-white">{t('ai.diagnostics')}</span>
-          </button>
-          <button 
-            onClick={() => {
-              setIsOpen(false);
-              window.dispatchEvent(new CustomEvent('8848-show-walkthroughs'));
-            }}
-            className="p-3 bg-white/[0.02] border border-white/5 rounded-xl hover:bg-white/5 transition-all text-left flex items-center gap-3 group"
-          >
-            <Target size={14} className="text-blue-500" />
-            <span className="text-[9px] font-black text-white/40 uppercase tracking-widest group-hover:text-white">{t('ai.walkthrough')}</span>
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
