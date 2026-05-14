@@ -1,8 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Mic, Sparkles, X, Terminal, ArrowRight, Zap, Target } from 'lucide-react';
+import { Send, Mic, Sparkles, X, Zap, Target, Globe, BookOpen } from 'lucide-react';
 import { useAIStore } from '../../store/useAIStore';
 import { use8848Diagnostics } from '../../store/8848/use8848Diagnostics';
+import { conversationEngine } from '../../voice/8848ConversationEngine';
+import { trainerEngine } from '../../services/8848/8848TrainerEngine';
+import { use8848TrainerStore } from '../../store/8848/use8848TrainerStore';
 import { getAIResponse } from '../../services/8848/geminiService';
 import { cn } from '../../lib/utils';
 import toast from 'react-hot-toast';
@@ -15,12 +18,20 @@ import { use8848LanguageStore } from '../../store/8848/use8848LanguageStore';
 import { LanguageSelector8848 } from './8848LanguageSelector';
 
 const AIChatPanel = () => {
-  const { messages, addMessage, isThinking, setIsThinking, context, setIsOpen, updateContext } = useAIStore();
+  const { messages, addMessage, isThinking, setIsThinking, context, setIsOpen, updateContext, isOpen } = useAIStore();
   const { startScan } = use8848Diagnostics();
-  const { onboardingCompleted } = use8848LanguageStore();
+  const { onboardingCompleted, toggleMenu } = use8848LanguageStore();
+  const { isActive: isTrainerActive } = use8848TrainerStore();
   const [input, setInput] = useState('');
   const { t, i18n } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-trigger language selection on first open
+  useEffect(() => {
+    if (isOpen && !onboardingCompleted) {
+      setTimeout(() => toggleMenu(true), 500);
+    }
+  }, [isOpen, onboardingCompleted, toggleMenu]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -33,6 +44,12 @@ const AIChatPanel = () => {
 
     const userMessage = input.trim();
     setInput('');
+
+    if (isTrainerActive) {
+      trainerEngine.handleUserQuestion(userMessage);
+      return;
+    }
+
     addMessage({ role: 'user', content: userMessage });
     setIsThinking(true);
 
@@ -102,7 +119,16 @@ const AIChatPanel = () => {
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar p-8 space-y-8">
         {!onboardingCompleted ? (
-          <LanguageSelector8848 />
+          <div className="h-full flex flex-col items-center justify-center text-center opacity-50 space-y-4">
+            <Globe className="text-white animate-pulse" size={48} />
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Synchronizing Global Intelligence...</p>
+            <button 
+              onClick={() => toggleMenu(true)}
+              className="text-[10px] px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+            >
+              Manual Language Select
+            </button>
+          </div>
         ) : (
           <>
             {messages.map((msg, i) => (
@@ -190,12 +216,12 @@ const AIChatPanel = () => {
             <button 
               onClick={() => {
                 setIsOpen(false);
-                window.dispatchEvent(new CustomEvent('8848-show-walkthroughs'));
+                conversationEngine.startVoiceSupport();
               }}
-              className="p-3 bg-white/[0.02] border border-white/5 rounded-xl hover:bg-white/5 transition-all text-left flex items-center gap-3 group"
+              className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl hover:bg-blue-500/20 transition-all text-left flex items-center gap-3 group"
             >
-              <Target size={14} className="text-blue-500" />
-              <span className="text-[9px] font-black text-white/40 uppercase tracking-widest group-hover:text-white">{t('ai.walkthrough')}</span>
+              <BookOpen size={14} className="text-blue-500" />
+              <span className="text-[9px] font-black text-white/40 uppercase tracking-widest group-hover:text-white">Live AI Trainer</span>
             </button>
           </div>
         </div>

@@ -82,22 +82,48 @@
     },
     "Table": {
       "title": "Table",
-      "description": "Individual table configuration",
+      "description": "Individual table configuration with spatial metadata",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
         "sectionId": { "type": "string" },
         "capacity": { "type": "integer" },
-        "status": { "type": "string", "enum": ["active", "inactive"] }
+        "status": { "type": "string", "enum": ["active", "inactive", "reserved", "occupied"] },
+        "shape": { "type": "string", "enum": ["square", "round", "rectangle", "sofa"] },
+        "type": { "type": "string", "enum": ["standard", "vip", "bar", "outdoor", "booth"] },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "rotation": { "type": "number" },
+        "restaurantId": { "type": "string" }
       }
     },
     "Section": {
       "title": "Section",
-      "description": "Restaurant sections",
+      "description": "Restaurant sections with layout dimensions",
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "hallId": { "type": "string" }
+        "hallId": { "type": "string" },
+        "floor": { "type": "integer" },
+        "isOutdoor": { "type": "boolean" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "restaurantId": { "type": "string" }
+      }
+    },
+    "LayoutVersion": {
+      "title": "LayoutVersion",
+      "description": "Snapshots of restaurant floor plans",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "snapshot": { "type": "string" },
+        "isDraft": { "type": "boolean" },
+        "isPublished": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       }
     },
     "Hall": {
@@ -138,6 +164,7 @@
     "tables/{tableId}": { "schema": "Table", "description": "Restaurant tables" },
     "sections/{sectionId}": { "schema": "Section", "description": "Restaurant sections" },
     "halls/{hallId}": { "schema": "Hall", "description": "Event halls" },
-    "menuItems/{itemId}": { "schema": "MenuItem", "description": "Master menu" }
+    "menuItems/{itemId}": { "schema": "MenuItem", "description": "Master menu" },
+    "layout_versions/{versionId}": { "schema": "LayoutVersion", "description": "Floor plan history" }
   }
 }

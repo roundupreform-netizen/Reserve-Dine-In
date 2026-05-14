@@ -25,21 +25,29 @@ export const analyzeSystemState = async (context: any, data: any): Promise<Diagn
   // 2. Check for Double Bookings
   if (data.reservations) {
     const bookingMap: Record<string, any[]> = {};
+    const conflictKeys = new Set<string>();
+    
     data.reservations.forEach((res: any) => {
       const key = `${res.date}-${res.time}-${res.tableId}`;
       if (!bookingMap[key]) bookingMap[key] = [];
       bookingMap[key].push(res);
       if (bookingMap[key].length > 1) {
-        issues.push({
-          id: `conflict-${key}`,
-          type: 'conflict',
-          severity: 'high',
-          title: 'Table Conflict Detected',
-          description: `Multiple units allocated to Table ${res.tableId} at ${res.time}.`,
-          affectedElement: `[data-table-id="${res.tableId}"]`,
-          suggestedFix: 'Reassign one reservation'
-        });
+        conflictKeys.add(key);
       }
+    });
+
+    conflictKeys.forEach(key => {
+      const conflictingReservations = bookingMap[key];
+      const res = conflictingReservations[0];
+      issues.push({
+        id: `conflict-${key}`,
+        type: 'conflict',
+        severity: 'high',
+        title: 'Table Conflict Detected',
+        description: `Multiple units allocated to Table ${res.tableId || 'Unknown'} at ${res.time}.`,
+        affectedElement: `[data-table-id="${res.tableId}"]`,
+        suggestedFix: 'Reassign one reservation'
+      });
     });
   }
 

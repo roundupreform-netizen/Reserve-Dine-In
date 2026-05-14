@@ -9,6 +9,7 @@ export interface AIContext {
   lastAction: string | null;
   userRole: string;
   language: string;
+  visibleElements: string[];
 }
 
 export interface AIState {
@@ -47,7 +48,8 @@ export const useAIStore = create<AIState>((set) => ({
     currentErrors: [],
     lastAction: null,
     userRole: 'admin',
-    language: 'en'
+    language: 'en',
+    visibleElements: []
   },
 
   setIsOpen: (isOpen) => set({ isOpen }),

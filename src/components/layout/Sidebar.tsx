@@ -19,7 +19,8 @@ import {
   Search,
   ShoppingCart,
   Zap,
-  Users
+  Users,
+  GraduationCap
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOutlet } from '../../contexts/OutletContext';
@@ -27,6 +28,8 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import Logo8848 from '../8848/8848Logo';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { trainerEngine } from '../../services/8848/8848TrainerEngine';
+import { use8848TrainerStore } from '../../store/8848/use8848TrainerStore';
 
 export type NavItem = 
   | 'dashboard' 
@@ -52,6 +55,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, 
   const { userData, logout } = useAuth();
   const { outlet } = useOutlet();
   const { t } = useTranslation();
+  const { isActive: isTrainerActive } = use8848TrainerStore();
+
+  const handleToggleTrainer = () => {
+    if (isTrainerActive) {
+      trainerEngine.stopTrainer();
+    } else {
+      trainerEngine.startTrainer();
+    }
+  };
 
   const menuGroups = [
     {
@@ -128,6 +140,48 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, 
 
       {/* Navigation */}
       <nav className="flex-1 px-4 overflow-y-auto no-scrollbar space-y-8">
+        {/* AI Trainer Activation Button */}
+        <div className="mb-6">
+          <button
+            id="ai-trainer-btn"
+            data-8848-id="ai-trainer-btn"
+            onClick={handleToggleTrainer}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-4 rounded-xl transition-all relative overflow-hidden group",
+              isTrainerActive 
+                ? "bg-amber-500 text-black shadow-lg shadow-amber-500/20" 
+                : "bg-white/[0.03] text-white/60 hover:bg-white/[0.08] hover:text-white border border-white/5"
+            )}
+          >
+            <div className={cn(
+              "p-2 rounded-lg",
+              isTrainerActive ? "bg-black/10" : "bg-white/5"
+            )}>
+              <GraduationCap size={20} className={cn(isTrainerActive ? "text-black" : "text-amber-500")} />
+            </div>
+            {!isCollapsed && (
+              <div className="flex flex-col items-start leading-tight">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-60">
+                   Operational
+                </span>
+                <span className="text-sm font-black tracking-tight uppercase">
+                  AI Trainer
+                </span>
+              </div>
+            )}
+            
+            {/* Pulsing indicator when active */}
+            {isTrainerActive && (
+              <motion.div
+                layoutId="trainer-glow"
+                className="absolute inset-0 bg-white/20"
+                animate={{ opacity: [0, 0.2, 0] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              />
+            )}
+          </button>
+        </div>
+
         {menuGroups.map((group, idx) => (
           <div key={idx} className="space-y-2">
             {!isCollapsed && (
@@ -139,6 +193,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeItem, onNavigate, isCollapsed, 
               {group.items.map((item) => (
                 <button
                   key={item.id}
+                  id={`nav-${item.id}`}
+                  data-8848-id={`nav-${item.id}`}
                   onClick={() => onNavigate(item.id as NavItem)}
                   className={cn(
                     "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all group relative",

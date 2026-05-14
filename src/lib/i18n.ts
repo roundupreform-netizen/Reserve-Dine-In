@@ -6,6 +6,7 @@ import en from '../locales/en.json';
 import hi from '../locales/hi.json';
 import kok from '../locales/kok.json';
 import mr from '../locales/mr.json';
+import ne from '../locales/ne.json';
 
 i18n
   .use(LanguageDetector)
@@ -16,6 +17,7 @@ i18n
       hi: { translation: hi },
       kok: { translation: kok },
       mr: { translation: mr },
+      ne: { translation: ne },
     },
     fallbackLng: 'en',
     interpolation: {

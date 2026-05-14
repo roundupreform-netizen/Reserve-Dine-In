@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { useAuth } from './AuthContext';
 
 interface OutletData {
   name: string;
@@ -24,10 +25,13 @@ interface OutletContextType {
 const OutletContext = createContext<OutletContextType | undefined>(undefined);
 
 export const OutletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { user, isAuthReady } = useAuth();
   const [outlet, setOutlet] = useState<OutletData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isAuthReady) return;
+
     const unsub = onSnapshot(doc(db, 'outlets', 'main-outlet'), (doc) => {
       if (doc.exists()) {
         setOutlet(doc.data() as OutletData);
@@ -38,7 +42,7 @@ export const OutletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     });
 
     return () => unsub();
-  }, []);
+  }, [isAuthReady]);
 
   return (
     <OutletContext.Provider value={{ outlet, loading }}>

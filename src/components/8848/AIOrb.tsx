@@ -2,12 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bot, Mic, X, MessageSquare, AlertCircle, Sparkles, ChevronUp, History } from 'lucide-react';
 import { useAIStore } from '../../store/useAIStore';
+import { use8848WalkthroughStore } from '../../store/8848/use8848WalkthroughStore';
+import { use8848VoiceStore } from '../../store/8848/use8848VoiceStore';
+import { use8848TrainerStore } from '../../store/8848/use8848TrainerStore';
 import { cn } from '../../lib/utils';
 import AIChatPanel from './AIChatPanel';
 import Logo8848 from './8848Logo';
 
 const AIOrb = () => {
   const { isOpen, setIsOpen, isListening, isThinking, context } = useAIStore();
+  const { isNarrationPlaying } = use8848WalkthroughStore();
+  const { state: voiceState } = use8848VoiceStore();
+  const { isActive: isTrainerActive } = use8848TrainerStore();
   const [showStatus, setShowStatus] = useState(false);
 
   useEffect(() => {
@@ -20,8 +26,9 @@ const AIOrb = () => {
 
   const getOrbState = () => {
     if (context.currentErrors.length > 0) return 'warning';
-    if (isThinking) return 'thinking';
-    if (isListening) return 'listening';
+    if (isThinking || isNarrationPlaying || voiceState === 'thinking') return 'thinking';
+    if (voiceState === 'listening' || isListening) return 'listening';
+    if (isTrainerActive) return 'thinking'; // Pulsing glow for trainer mode
     return 'idle';
   };
 

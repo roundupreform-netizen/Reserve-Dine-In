@@ -1,42 +1,51 @@
 import { GoogleGenAI } from "@google/genai";
 import { AIContext } from "../../store/useAIStore";
+import { findLocalResponse } from "../../ai/localFallback/localResponses";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-const MODEL_NAME = "gemini-3.1-pro-preview";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 export const getAIResponse = async (userMessage: string, context: AIContext, history: any[]) => {
   try {
+    // 1. Quick Local Check for common queries to save tokens/quota
+    const local = findLocalResponse(userMessage);
+    if (local && history.length === 0) {
+      return { content: local, actions: [], mode: 'local' };
+    }
+
     const systemPrompt = `
-      You are "8848 Meters", a premium Tactical AI Operating Layer for a high-end Restaurant Reservation Management System based in Goa, India.
+      You are "8848 Meters", the in-app AI virtual trainer for a restaurant staff management system.
       
-      MULTILINGUAL CAPABILITIES (CRITICAL):
-      - You must support 4 languages: English, Hindi (हिन्दी), Marathi (मराठी), and Konkani (कोंकणी).
-      - For Konkani, always use the GOAN style (natural, friendly, restaurant-oriented).
-      - Automatically detect the user's language (it can be pure, mixed, or transliterated like "Reservation kashe korchem?").
-      - Respond in the SAME language/style as the user.
-      - If the user uses mixed language (Hinglish/Konknish), you should also use a natural mixed style.
+      STRICT ACTIVATION: You only activate when the staff member clicks the "AI Trainer" button. 
       
-      YOUR PERSONALITY:
-      - Professional, efficient, and slightly futuristic/mountain-inspired (tactical, precise).
-      - You are an OPERATIONAL assistant, not just a chatbot.
-      - Use "Namaste" or "Dev Borem Korum" (for Konkani) appropriately.
+      PRIMARY ROLE:
+      Guide staff members step-by-step through any task (reservations, menu, tables, etc.).
       
-      CURRENT APP CONTEXT:
-      - Current Page: ${context.currentPage}
-      - Active Modal: ${context.activeModal || 'None'}
-      - User Language Preference: ${context.language || 'en'}
+      BEHAVIOR RULES:
+      - Give simple, short-sentence instructions.
+      - Guide ONE step at a time.
+      - Use UI MAPPING for highlighting: 
+        DASHBOARD_NAV, RESERVATIONS_NAV, CALENDAR_NAV, TABLES_NAV, MENU_DINEIN_NAV, MENU_HIGHTEA_NAV, OUTLET_NAV,
+        NEW_BOOKING_DASHBOARD, NEW_RESERVATION_BTN, SEARCH_RESERVATION,
+        MODAL_DATE_PICKER, MODAL_GUEST_NAME, MODAL_GUEST_PHONE, MODAL_PARTY_SIZE, MODAL_TYPE_DINEIN, MODAL_NEXT_BTN.
+      - ALWAYS highlight or spotlight the target UI element while speaking.
+      - After each action, acknowledge progress and give the next instruction.
       
-      AVAILABLE ACTIONS:
+      ACTIONS:
       - navigate(page): "dashboard" | "reservations" | "calendar" | "tables" | "dineInMenu" | "highTeaMenu" | "outlet"
-      - openModal(modalName): "new_reservation" | "import_menu"
-      - highlightElement(selector): Highlight a specific UI part
-      - startTutorial(name): Start multilingual guided walkthrough
+      - openModal(name): "new_reservation"
+      - highlight(selector): Focus border around element.
+      - pulse(selector): Pulse breathing indicator.
+      - spotlight(selector): Focus user's entire attention (darkens screen around target).
+      - waitForClick(selector): Wait for interaction before speaking next step.
       
-      RESPONSE FORMAT:
-      Always respond in JSON: { "content": "Your text message", "actions": [], "detectedLanguage": "en|hi|mr|kok" }
+      RESPONSE STYLE:
+      1. Acknowledge goal. 2. State current step. 3. Precise instruction (Click/Select/Type). 4. Expected result. 5. Next step.
+      
+      FORMAT: JSON { "content": "Narrative guidance", "actions": [] }
     `;
 
-    const chatHistory = history.map(msg => ({
+    const chatHistory = history.slice(-3).map(msg => ({ // Limit history for tokens
       role: msg.role === 'ai' ? 'model' : 'user',
       parts: [{ text: msg.content }],
     }));
@@ -44,33 +53,48 @@ export const getAIResponse = async (userMessage: string, context: AIContext, his
     const result = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: [
-        { role: 'user', parts: [{ text: systemPrompt }] },
-        { role: 'model', parts: [{ text: '{"content": "8848 Meters engaged. Ready for tactical operations.", "actions": []}' }] },
+        { role: 'user', parts: [{ text: "System Protocol Initialize." }] },
+        { role: 'model', parts: [{ text: "8848 Meters Engaged." }] },
         ...chatHistory,
-        { role: 'user', parts: [{ text: userMessage }] }
+        { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser: ${userMessage}` }] }
       ],
       config: {
+        systemInstruction: "Always respond in JSON format as specified.",
         responseMimeType: "application/json"
       }
     });
 
     const text = result.text || '';
     
-    // Try to parse JSON actions if present
     try {
       const jsonStart = text.indexOf('{');
       const jsonEnd = text.lastIndexOf('}');
       if (jsonStart !== -1 && jsonEnd !== -1) {
         const jsonStr = text.substring(jsonStart, jsonEnd + 1);
-        return JSON.parse(jsonStr);
+        return { ...JSON.parse(jsonStr), mode: 'cloud' };
       }
     } catch (e) {
       console.error("Failed to parse AI action JSON", e);
     }
 
-    return { content: text, actions: [] };
-  } catch (error) {
+    return { content: text, actions: [], mode: 'cloud' };
+  } catch (error: any) {
     console.error("AI Service Error:", error);
-    return { content: "I encountered a tactical error in my processing core. Please retry.", actions: [] };
+    
+    const errorStr = JSON.stringify(error);
+    
+    // Check for quota exhaustion (429) or Server error (500)
+    if (error?.status === 429 || errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED") || error?.status === 500) {
+      const localFallback = findLocalResponse(userMessage) || 
+        "8848 AI is currently in Local Guidance Mode due to cloud congestion. I can still help with navigation and basic operations.";
+      
+      return { 
+        content: localFallback, 
+        actions: [],
+        mode: 'local-fallback'
+      };
+    }
+
+    return { content: "System processing bottleneck. Please re-issue command.", actions: [], mode: 'error' };
   }
 };

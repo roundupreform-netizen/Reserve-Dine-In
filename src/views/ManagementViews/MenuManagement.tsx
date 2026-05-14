@@ -16,6 +16,7 @@ import {
   Tag,
   Upload,
   FileText,
+  FileCode,
   Clock,
   Flame,
   ShieldAlert,
@@ -189,6 +190,37 @@ const MenuManagement = ({ initialMenuType = 'dine-in' }: { initialMenuType?: 'di
     (item.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const handleExportBackup = () => {
+    const backupData = {
+      items,
+      exportDate: new Date().toISOString(),
+      menuType
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `menu_backup_${menuType}_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm("Are you ABSOLUTELY sure? This will delete all current items in this menu catalog. Ensure you have a backup first.")) return;
+    
+    try {
+      const batch = writeBatch(db);
+      filteredItems.forEach(item => {
+        if (item.id) {
+          batch.delete(doc(db, 'menuItems', item.id));
+        }
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error("Clear all failed:", error);
+    }
+  };
+
   const inputClasses = "w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-amber-500/50 outline-none text-white transition-all";
   const labelClasses = "text-[10px] font-black text-white/20 uppercase tracking-widest mb-1.5 block";
 
@@ -231,6 +263,51 @@ const MenuManagement = ({ initialMenuType = 'dine-in' }: { initialMenuType?: 'di
             </div>
             
             <div className="flex items-center gap-2">
+              <div onClick={handleExportBackup} className="h-10 px-5 rounded-xl border border-white/10 flex items-center justify-center gap-2 cursor-pointer transition-all hover:bg-white/5 text-white/40" title="Download JSON Backup">
+                <Copy size={16} />
+                <span className="text-[9px] font-black uppercase tracking-widest">
+                  Backup
+                </span>
+              </div>
+
+              <label className="h-10 px-5 rounded-xl border border-white/10 flex items-center justify-center gap-2 cursor-pointer transition-all hover:bg-white/5 text-white/40" title="Restore from JSON Backup">
+                <FileCode size={16} />
+                <span className="text-[9px] font-black uppercase tracking-widest">
+                  Restore
+                </span>
+                <input 
+                  type="file" 
+                  accept=".json" 
+                  className="hidden" 
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const text = await file.text();
+                      const data = JSON.parse(text);
+                      if (data.items && Array.isArray(data.items)) {
+                        const batch = writeBatch(db);
+                        data.items.forEach((item: any) => {
+                          const docRef = doc(collection(db, 'menuItems'));
+                          // Remove id if it exists in backup to create new entries or it might fail if we don't have update perms
+                          const { id, ...itemData } = item;
+                          batch.set(docRef, { ...itemData, updatedAt: serverTimestamp() });
+                        });
+                        await batch.commit();
+                        alert(`Successfully restored ${data.items.length} items.`);
+                      }
+                    } catch (err) {
+                      console.error("Restore failed:", err);
+                      alert("Restore failed. Invalid backup file structure.");
+                    }
+                  }}
+                />
+              </label>
+
+              <div onClick={handleClearAll} className="h-10 px-4 rounded-xl border border-red-500/20 bg-red-500/5 flex items-center justify-center gap-2 cursor-pointer transition-all hover:bg-red-500 hover:text-white text-red-500/40" title="Delete All Items in Current View">
+                <Trash2 size={16} />
+              </div>
+
               <div onClick={() => setIsUploadModalOpen(true)} className="h-10 px-5 rounded-xl border border-white/10 flex items-center justify-center gap-2 cursor-pointer transition-all hover:bg-white/5 text-white/40">
                 <Upload size={16} />
                 <span className="text-[9px] font-black uppercase tracking-widest">
@@ -304,13 +381,27 @@ const MenuManagement = ({ initialMenuType = 'dine-in' }: { initialMenuType?: 'di
                 ))}
               </div>
             ) : filteredItems.length === 0 ? (
-               <div className="py-20 flex flex-col items-center justify-center text-center space-y-4 bg-white/[0.01] border border-white/5 rounded-3xl">
-                 <div className="w-16 h-16 rounded-2xl bg-white/[0.03] flex items-center justify-center text-white/5">
-                   <UtensilsCrossed size={32} strokeWidth={1} />
+               <div className="py-20 flex flex-col items-center justify-center text-center space-y-6 bg-white/[0.01] border border-white/5 rounded-3xl p-10">
+                 <div className="w-20 h-20 rounded-[2rem] bg-white/[0.03] flex items-center justify-center text-white/5">
+                   <UtensilsCrossed size={40} strokeWidth={1} />
                  </div>
-                 <div className="space-y-1">
-                   <h3 className="text-xl font-black text-white tracking-tighter uppercase">No menu items</h3>
-                   <p className="text-white/20 text-xs font-medium max-w-xs">Upload or add a dish manually.</p>
+                 <div className="space-y-2">
+                   <h3 className="text-2xl font-black text-white tracking-tighter uppercase">Menu is currently empty</h3>
+                   <p className="text-white/20 text-xs font-medium max-w-xs mx-auto">Upload or add a dish manually. If you previously uploaded menus, check the <b>Import history</b> to restore them.</p>
+                 </div>
+                 <div className="flex gap-3">
+                    <Button 
+                      onClick={() => setIsUploadModalOpen(true)}
+                      className="h-12 bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest px-8 rounded-xl transition-all border border-white/10"
+                    >
+                      Check History
+                    </Button>
+                    <Button 
+                      onClick={() => { setEditingItem(null); resetForm(); setIsModalOpen(true); }}
+                      className="h-12 bg-amber-500 text-black font-black uppercase tracking-widest px-8 rounded-xl transition-all"
+                    >
+                      Add Manually
+                    </Button>
                  </div>
                </div>
             ) : viewMode === 'grid' ? (

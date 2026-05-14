@@ -1,6 +1,8 @@
 {
-  "name": "Reserve dine in",
-  "description": "Premium restaurant reservation management system integrated with the 8848 Meters AI Operating Layer for autonomous diagnostics and guided operations.",
-  "requestFramePermissions": [],
+  "name": "8848 Meters: Tactical AI Ops",
+  "description": "Next-generation restaurant operating layer featuring 8848 Meters AI for active navigation guidance, real-time diagnostics, and autonomous workflow coordination.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
   "majorCapabilities": []
 }

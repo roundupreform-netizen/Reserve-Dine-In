@@ -14,19 +14,20 @@ const DiagnosticEngine = () => {
   const { isScanning, issues, setIssues, setIsScanning, activeIssue, setActiveIssue, clearIssues } = use8848Diagnostics();
   const { t } = useTranslation();
 
+  // Background monitoring removed to prevent internal Firestore assertion conflicts (ID: ca9)
   // Background monitoring for ambient errors
+  /* 
   useEffect(() => {
     const reservationsRef = collection(db, 'reservations');
     const q = query(reservationsRef, where('status', 'not-in', ['cancelled', 'completed']));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reservations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
-      // We don't trigger a full scan here, just update the context errors for the AI
-      // The logic is moved to the service
+      // ...
     });
 
     return () => unsubscribe();
   }, []);
+  */
 
   // Handle active manual scan
   useEffect(() => {

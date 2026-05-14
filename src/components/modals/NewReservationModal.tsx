@@ -127,6 +127,8 @@ const InteractiveDatePicker: React.FC<InteractiveDatePickerProps> = ({ value, on
     <div className="relative" ref={popoverRef}>
       <motion.button
         type="button"
+        id="interactive-date-picker"
+        data-8848-id="interactive-date-picker"
         animate={isShaking ? { x: [-4, 4, -4, 4, 0], transition: { duration: 0.4 } } : { x: 0 }}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
@@ -328,6 +330,7 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isTimeShaking, setIsTimeShaking] = useState(false);
   const [step, setStep] = useState(1);
+  const totalSteps = 3;
   const [availabilityStatus, setAvailabilityStatus] = useState<'checking' | 'available' | 'booked' | 'limited'>('available');
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
 
@@ -341,6 +344,8 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
     setWarningMessage(msg);
     setShowWarning(true);
   };
+  const [sections, setSections] = useState<any[]>([]);
+  const [tables, setTables] = useState<any[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [menuSearch, setMenuSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -348,6 +353,34 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
   const [reservationId, setReservationId] = useState('');
   const [existingReservations, setExistingReservations] = useState<any[]>([]);
   const ticketRef = React.useRef<HTMLDivElement>(null);
+
+  // Fetch real setup from Firestore
+  useEffect(() => {
+    if (!isOpen || !user) return;
+
+    // Sections
+    const qSections = query(collection(db, 'sections'));
+    const unsubSections = onSnapshot(qSections, (snap) => {
+      setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.warn("Sections load failed:", error.message);
+    });
+
+    // Tables
+    const qTables = query(collection(db, 'tables'));
+    const unsubTables = onSnapshot(qTables, (snap) => {
+      setTables(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.warn("Tables load failed:", error.message);
+    });
+
+    return () => {
+      unsubSections();
+      unsubTables();
+    };
+  }, [isOpen, user]);
+
+  const ALL_TABLE_IDS = useMemo(() => tables.map(t => t.id || t.name), [tables]);
 
   const [formData, setFormData] = useState({
     salutation: 'Mr.',
@@ -514,11 +547,12 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
     }
   };
 
-  const handleSectionSelect = (section: typeof SECTIONS[0]) => {
+  const handleSectionSelect = (section: any) => {
+    const sectionTables = tables.filter(t => t.sectionId === section.id).map(t => t.id || t.name);
     setFormData(prev => ({
       ...prev,
       sectionId: section.id,
-      selectedTables: section.tables
+      selectedTables: sectionTables
     }));
   };
 
@@ -561,15 +595,16 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
   }, [menuItems, menuSearch, selectedCategory, vegOnly]);
 
   const nextStep = () => {
-    if (step === 1 && (!formData.date || !formData.session || !formData.reservationType)) return;
-    if (step === 2 && formData.selectedTables.length === 0) return;
-    if (step === 3) {
+    if (step === 1) {
+      if (!formData.date || !formData.session || !formData.reservationType || formData.selectedTables.length === 0) return;
+    }
+    if (step === 2) {
       if (!formData.guestName.trim() || !formData.time || !formData.guests || !formData.phone.trim()) return;
       
       // Final validation before leaving guest details step
       if (isDateTimePast(formData.date, formData.time)) {
         setIsTimeShaking(true);
-        setTimeout(() => setIsTimeShaking(true), 500);
+        setTimeout(() => setIsTimeShaking(false), 500);
         triggerWarning();
         return;
       }
@@ -579,16 +614,14 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
 
   const isStepValid = useMemo(() => {
     if (step === 1) {
-      return formData.date && formData.session && formData.reservationType && !isDateTimePast(formData.date, '23:59'); // Basic date check
+      return formData.date && formData.session && formData.reservationType && formData.selectedTables.length > 0 && availabilityStatus !== 'booked';
     }
-    if (step === 2) return formData.selectedTables.length > 0 && availabilityStatus !== 'booked';
-    if (step === 3) {
+    if (step === 2) {
       return formData.guestName.trim() && formData.time && formData.guests && formData.phone.trim() && !isDateTimePast(formData.date, formData.time) && availabilityStatus !== 'booked';
     }
-    if (step === 4) return true;
-    if (step === 5) return !isDateTimePast(formData.date, formData.time) && availabilityStatus !== 'booked';
+    if (step === 3) return !isDateTimePast(formData.date, formData.time) && availabilityStatus !== 'booked';
     return false;
-  }, [step, formData, currentTime, availabilityStatus]);
+  }, [step, formData, availabilityStatus]);
 
   // Prevent past time selection automatically
   useEffect(() => {
@@ -689,14 +722,12 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-2xl font-black tracking-tighter text-white">
-                    {success ? "Booking Confirmed" : step === 1 ? "Reservation Type" : step === 2 ? "Select Seating" : step === 3 ? "Guest Details" : step === 4 ? "Pre-Order Menu" : "Review Booking"}
+                    {success ? "Booking Confirmed" : step === 1 ? "Choose Seating" : step === 2 ? "Guest Details" : "Review & Pre-Order"}
                   </h2>
                   {!success && (
-                    <p className="text-xs text-white/40 font-medium">Step {step} of 5 • {
-                      step === 1 ? "Choose how you'd like to book" : 
-                      step === 2 ? "Select tables or section" : 
-                      step === 3 ? "Enter guest information" : 
-                      step === 4 ? "Select dishes for your visit" :
+                    <p className="text-xs text-white/40 font-medium">Step {step} of {totalSteps} • {
+                      step === 1 ? "Select date and tables" : 
+                      step === 2 ? "Enter host information" : 
                       "Finalize your reservation"
                     }</p>
                   )}
@@ -715,7 +746,7 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
 
               {!success && (
                 <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map(s => (
+                  {[1, 2, 3].map(s => (
                     <div 
                       key={s} 
                       className={cn(
@@ -881,11 +912,11 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                   </div>
                 </div>
               ) : (
-                <div className="p-8">
+                <div className="p-8 space-y-8">
                   {step === 1 && (
                     <div className="space-y-8">
-                      {/* Date and Session Selection Moved to Step 1 */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white/[0.02] border border-white/5 p-6 rounded-[2rem]">
+                      {/* Date and Session Selection combined with Seating */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <label className={labelClasses}>Reservation Date *</label>
                           <InteractiveDatePicker 
@@ -895,7 +926,7 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className={labelClasses}>Time Period (Session) *</label>
+                          <label className={labelClasses}>Session *</label>
                           <StyledSelect 
                             value={formData.session} 
                             onChange={value => setFormData({...formData, session: value})}
@@ -905,144 +936,136 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                         </div>
                       </div>
 
-                      <div className="space-y-4">
-                        <p className={labelClasses}>Select Reservation Type</p>
-                        <div className="grid grid-cols-1 gap-4">
-                          {[
-                            { id: 'single', label: 'Single Table', sub: 'Reserve one specific table', icon: User },
-                            { id: 'multiple', label: 'Multiple Tables', sub: 'Book multiple connected tables', icon: Users },
-                            { id: 'section', label: 'Full Section', sub: 'Perfect for large groups or events', icon: LayoutGrid }
-                          ].map(type => (
-                            <button
-                              key={type.id}
-                              onClick={() => setFormData({...formData, reservationType: type.id, selectedTables: []})}
-                              className={cn(
-                                "group p-6 rounded-[2rem] border transition-all text-left flex items-center gap-6",
-                                formData.reservationType === type.id 
-                                  ? "bg-amber-500/10 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.1)]" 
-                                  : "bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04]"
-                              )}
-                            >
-                              <div className={cn(
-                                "w-14 h-14 rounded-2xl flex items-center justify-center transition-all",
-                                formData.reservationType === type.id ? "bg-amber-500 text-black" : "bg-white/5 text-white/40"
-                              )}>
-                                <type.icon size={24} />
-                              </div>
-                              <div>
-                                <h4 className="text-lg font-black text-white">{type.label}</h4>
-                                <p className="text-xs text-white/40">{type.sub}</p>
-                              </div>
-                            </button>
-                          ))}
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between px-2">
+                          <div className="flex gap-1.5 p-1 bg-white/[0.02] border border-white/5 rounded-2xl">
+                            {[
+                              { id: 'single', label: 'Single', icon: User },
+                              { id: 'multiple', label: 'Multi', icon: Users },
+                              { id: 'section', label: 'Full Section', icon: LayoutGrid }
+                            ].map(type => (
+                              <button
+                                key={type.id}
+                                onClick={() => setFormData({...formData, reservationType: type.id, selectedTables: []})}
+                                className={cn(
+                                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                                  formData.reservationType === type.id 
+                                    ? "bg-amber-500 text-black shadow-lg" 
+                                    : "text-white/20 hover:text-white/40"
+                                )}
+                              >
+                                <type.icon size={12} />
+                                {type.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {isCheckingAvailability ? (
+                              <Loader2 size={12} className="text-amber-500 animate-spin" />
+                            ) : (
+                              <div className={cn("w-2 h-2 rounded-full", 
+                                availabilityStatus === 'available' ? "bg-emerald-500" :
+                                availabilityStatus === 'limited' ? "bg-amber-500" : "bg-red-500"
+                              )} />
+                            )}
+                            <span className="text-[9px] font-black uppercase tracking-widest text-white/40">
+                              {isCheckingAvailability ? "Syncing..." : availabilityStatus}
+                            </span>
+                          </div>
                         </div>
+
+                        {formData.reservationType === 'section' ? (
+                          <div className="grid grid-cols-1 gap-3 max-h-[300px] overflow-y-auto no-scrollbar">
+                            {sections.map(sec => {
+                              const isSelected = formData.sectionId === sec.id;
+                              const sectionTables = tables.filter(t => t.sectionId === sec.id);
+                              const isBusy = sectionTables.some(t => bookedTables.includes(t.id || t.name));
+                              return (
+                                <button
+                                  key={sec.id}
+                                  disabled={isBusy}
+                                  onClick={() => handleSectionSelect(sec)}
+                                  className={cn(
+                                    "p-5 rounded-3xl border transition-all text-left flex justify-between items-center group",
+                                    isSelected ? "bg-amber-500/10 border-amber-500" : "bg-white/[0.02] border-white/5 hover:border-amber-500/20",
+                                    isBusy && "opacity-50 cursor-not-allowed grayscale"
+                                  )}
+                                >
+                                  <div>
+                                    <h4 className="text-sm font-black text-white group-hover:text-amber-500 transition-colors">{sec.name}</h4>
+                                    <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest mt-1">{sectionTables.length} Tables available</p>
+                                  </div>
+                                  {isBusy ? (
+                                    <span className="text-[8px] font-black bg-red-500/10 text-red-500 px-2 py-1 rounded-full uppercase tracking-tighter">Fully Booked</span>
+                                  ) : (
+                                    <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", isSelected ? "border-amber-500 bg-amber-500" : "border-white/10")}>
+                                      {isSelected && <Check size={14} className="text-black" />}
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="space-y-6 max-h-[350px] overflow-y-auto no-scrollbar pr-1">
+                            {sections.map(sec => (
+                              <div key={sec.id} className="space-y-3">
+                                <h5 className="text-[9px] font-black uppercase tracking-[0.3em] text-white/20 ml-2">{sec.name}</h5>
+                                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+                                  {tables.filter(t => t.sectionId === sec.id).map(table => {
+                                    const tableId = table.id || table.name;
+                                    const isSelected = formData.selectedTables.includes(tableId);
+                                    const isBooked = bookedTables.includes(tableId);
+                                    return (
+                                      <button
+                                        key={tableId}
+                                        disabled={isBooked}
+                                        onClick={() => handleTableToggle(tableId)}
+                                        className={cn(
+                                          "h-14 rounded-2xl border flex flex-col items-center justify-center transition-all relative overflow-hidden",
+                                          isBooked ? "bg-red-500/5 border-red-500/10 text-red-500 opacity-40 cursor-not-allowed" :
+                                          isSelected ? "bg-amber-500 text-black border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.2)]" :
+                                          "bg-white/[0.02] border-white/5 text-white/40 hover:border-amber-500/50 hover:text-white"
+                                        )}
+                                      >
+                                        <span className="text-[11px] font-black">{table.name}</span>
+                                        <span className={cn("text-[7px] font-black uppercase tracking-tighter", isSelected ? "text-black/60" : "opacity-30")}>{table.capacity}P</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
 
                   {step === 2 && (
                     <div className="space-y-6">
-                      <div className="flex items-center justify-between px-2">
-                        <div className="flex items-center gap-2">
-                          {isCheckingAvailability ? (
-                            <Loader2 size={12} className="text-amber-500 animate-spin" />
-                          ) : (
-                            <div className={cn("w-2 h-2 rounded-full", 
-                              availabilityStatus === 'available' ? "bg-emerald-500" :
-                              availabilityStatus === 'limited' ? "bg-amber-500" : "bg-red-500"
-                            )} />
-                          )}
-                          <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                            {isCheckingAvailability ? "Synchronizing Availability..." : 
-                             availabilityStatus === 'available' ? "Tables Available" :
-                             availabilityStatus === 'limited' ? "Few Tables Remaining" : "Table Conflict Detected"}
-                          </span>
-                        </div>
-                        {availabilityStatus === 'booked' && (
-                          <span className="text-[9px] font-bold text-red-500 uppercase">Selection Taken</span>
-                        )}
-                      </div>
-
-                      {formData.reservationType === 'section' ? (
-                        <div className="grid grid-cols-1 gap-4">
-                          {SECTIONS.map(sec => {
-                            const isSelected = formData.sectionId === sec.id;
-                            const isBusy = sec.tables.some(t => bookedTables.includes(t));
-                            return (
-                              <button
-                                key={sec.id}
-                                disabled={isBusy}
-                                onClick={() => handleSectionSelect(sec)}
-                                className={cn(
-                                  "p-6 rounded-[2rem] border transition-all text-left flex justify-between items-center",
-                                  isSelected ? "bg-amber-500/10 border-amber-500" : "bg-white/[0.02] border-white/5 hover:border-white/10",
-                                  isBusy && "opacity-50 cursor-not-allowed grayscale"
-                                )}
-                              >
-                                <div>
-                                  <h4 className="text-lg font-black text-white">{sec.name}</h4>
-                                  <p className="text-xs text-white/40 font-mono">{sec.range} ({sec.tables.length} Tables)</p>
-                                </div>
-                                {isBusy ? (
-                                  <span className="text-[10px] font-black bg-red-500/10 text-red-500 px-3 py-1 rounded-full">Busy</span>
-                                ) : (
-                                  <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", isSelected ? "border-amber-500 bg-amber-500" : "border-white/10")}>
-                                    {isSelected && <Check size={14} className="text-black" />}
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="space-y-8">
-                          {SECTIONS.map(sec => (
-                            <div key={sec.id} className="space-y-4">
-                              <h5 className="text-[10px] font-black uppercase tracking-widest text-white/20 ml-2">{sec.name}</h5>
-                              <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-                                {sec.tables.map(table => {
-                                  const isSelected = formData.selectedTables.includes(table);
-                                  const isBooked = bookedTables.includes(table);
-                                  return (
-                                    <button
-                                      key={table}
-                                      disabled={isBooked}
-                                      onClick={() => handleTableToggle(table)}
-                                      className={cn(
-                                        "h-12 rounded-xl border flex items-center justify-center text-xs font-black transition-all",
-                                        isBooked ? "bg-red-500/10 border-red-500/20 text-red-500 line-through opacity-50" :
-                                        isSelected ? "bg-emerald-500 text-black border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]" :
-                                        "bg-white/5 border-white/5 text-white/40 hover:border-white/20 hover:text-white"
-                                      )}
-                                    >
-                                      {table}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {step === 3 && (
-                    <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <label className={labelClasses}>Guest Name *</label>
+                          <label className={labelClasses}>Host Details *</label>
                           <div className="flex gap-2">
                             <StyledSelect 
-                              className="w-32"
+                              className="w-28"
                               value={formData.salutation}
                               onChange={value => setFormData({...formData, salutation: value})}
                               options={['Mr.', 'Mrs.', 'Ms.', 'Dr.']}
-                              icon={<User size={14} />}
+                              icon={<User size={12} />}
                             />
                             <div className="flex-1 relative">
                               <User size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
-                              <input required type="text" className={inputClasses} value={formData.guestName} onChange={e => setFormData({...formData, guestName: e.target.value})} placeholder="Name" />
+                              <input 
+                                required 
+                                type="text" 
+                                className={inputClasses} 
+                                value={formData.guestName} 
+                                onChange={e => setFormData({...formData, guestName: e.target.value})} 
+                                placeholder="Guest Name" 
+                              />
                             </div>
                           </div>
                         </div>
@@ -1050,22 +1073,13 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                           <label className={labelClasses}>Phone *</label>
                           <div className="relative">
                             <Phone size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
-                            <input required type="tel" className={inputClasses} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="+1 000 000 000" />
+                            <input required type="tel" className={inputClasses} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="+91 00000 00000" />
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className={labelClasses}>E-mail (Optional)</label>
+                          <label className={labelClasses}>Arrival Time *</label>
                           <div className="relative">
-                            <MessageCircle size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
-                            <input type="email" className={inputClasses} value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="host@example.com" />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className={labelClasses}>Time *</label>
-                          <div className="relative">
-                            <motion.div
-                              animate={isTimeShaking ? { x: [-4, 4, -4, 4, 0], transition: { duration: 0.4 } } : { x: 0 }}
-                            >
+                            <motion.div animate={isTimeShaking ? { x: [-4, 4, -4, 4, 0] } : { x: 0 }}>
                               <StyledSelect 
                                 value={formData.time} 
                                 onChange={value => setFormData({...formData, time: value})}
@@ -1076,239 +1090,131 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                                   const isPast = isDateTimePast(formData.date, timeStr);
                                   return { 
                                     value: timeStr, 
-                                    label: `${hour % 12 || 12}:${min.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}${isPast ? ' (Past)' : ''}`,
+                                    label: `${hour % 12 || 12}:${min.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`,
                                     disabled: isPast
                                   };
                                 })}
-                                icon={<Clock size={14} className={isTimeShaking ? "text-red-500" : "text-white/20"} />}
-                                className={cn(
-                                  isTimeShaking && "border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.1)] rounded-2xl",
-                                  availabilityStatus === 'booked' && "border-red-500/50"
-                                )}
+                                icon={<Clock size={12} className="text-white/20" />}
                               />
                             </motion.div>
-                            <div className="mt-2 flex items-center justify-between px-1">
-                               <div className="flex items-center gap-2">
-                                  {isCheckingAvailability ? (
-                                    <Loader2 size={10} className="text-amber-500 animate-spin" />
-                                  ) : (
-                                    <div className={cn("w-1.5 h-1.5 rounded-full", 
-                                      availabilityStatus === 'available' ? "bg-emerald-500" :
-                                      availabilityStatus === 'limited' ? "bg-amber-500" : "bg-red-500"
-                                    )} />
-                                  )}
-                                  <span className="text-[8px] font-black uppercase tracking-widest text-white/30">
-                                    {isCheckingAvailability ? "Checking..." : availabilityStatus}
-                                  </span>
-                               </div>
-                               {availabilityStatus === 'booked' && (
-                                  <span className="text-[8px] font-bold text-red-500 uppercase flex items-center gap-1">
-                                    <AlertCircle size={8} /> Slot Mixed
-                                  </span>
-                               )}
-                            </div>
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <label className={labelClasses}>Guests Count *</label>
+                          <label className={labelClasses}>Party Size *</label>
                           <StyledSelect 
                             value={formData.guests} 
                             onChange={value => setFormData({...formData, guests: value})}
-                            options={[1,2,3,4,5,6,8,10,12,15,20].map(n => ({ value: String(n), label: `${n} PAX` }))}
-                            icon={<Users size={14} />}
+                            options={[1,2,3,4,5,6,7,8,10,12,15,20,30,50].map(n => ({ value: String(n), label: `${n} PAX` }))}
+                            icon={<Users size={12} />}
                           />
                         </div>
                       </div>
+
                       <div className="space-y-2">
-                        <label className={labelClasses}>Notes / Special Requests</label>
+                        <label className={labelClasses}>E-mail (Optional)</label>
                         <div className="relative">
-                           <MessageSquare size={14} className="absolute left-4 top-4 text-white/20" />
-                           <textarea className={cn(inputClasses, "h-20 py-4 pl-11 resize-none")} value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="e.g. Allergy info, window seat..." />
+                          <MessageSquare size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
+                          <input type="email" className={inputClasses} value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="host@email.com" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className={labelClasses}>Internal Notes & Requests</label>
+                        <div className="relative">
+                          <textarea 
+                            className={cn(inputClasses, "h-24 py-4 resize-none")} 
+                            value={formData.notes} 
+                            onChange={e => setFormData({...formData, notes: e.target.value})} 
+                            placeholder="Add allergies, special occasions or table preferences..." 
+                          />
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {step === 4 && (
-                    <div className="space-y-6">
-                      {/* Search & Filter */}
-                      <div className="sticky top-0 z-10 bg-[#0a0a0c] pb-4 space-y-4">
-                        <div className="flex gap-4">
-                          <div className="flex-1 relative">
-                            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
-                            <input 
-                              type="text" 
-                              className={inputClasses} 
-                              placeholder="Search menu items..." 
-                              value={menuSearch}
-                              onChange={e => setMenuSearch(e.target.value)}
-                            />
-                          </div>
-                          <button 
-                            onClick={() => setVegOnly(!vegOnly)}
-                            className={cn(
-                              "px-4 rounded-2xl border flex items-center gap-2 transition-all text-[10px] font-black uppercase tracking-widest",
-                              vegOnly ? "bg-emerald-500/10 border-emerald-500 text-emerald-500" : "bg-white/5 border-white/5 text-white/40"
-                            )}
-                          >
-                            <Leaf size={14} />
-                            Veg
-                          </button>
-                        </div>
-                        
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                          {categories.map(cat => (
-                            <button
-                              key={cat}
-                              onClick={() => setSelectedCategory(cat)}
-                              className={cn(
-                                "px-6 h-9 rounded-full text-[10px] font-black whitespace-nowrap transition-all uppercase tracking-widest border",
-                                selectedCategory === cat 
-                                  ? "bg-amber-500 text-black border-amber-500" 
-                                  : "bg-white/5 text-white/40 border-white/5 hover:border-white/20"
-                              )}
-                            >
-                              {cat}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Items Grid */}
-                      <div className="grid grid-cols-1 gap-2">
-                        {filteredMenu.map(item => {
-                          const quantity = formData.preorderItems.find(i => i.itemId === item.id)?.qty || 0;
-                          return (
-                            <div key={item.id} className="px-5 py-3 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all">
-                              <div className="flex-1 min-w-0 mr-4">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <div className={cn(
-                                    "w-1.5 h-1.5 rounded-full shrink-0",
-                                    item.type === 'veg' ? "bg-emerald-500" : "bg-red-500"
-                                  )} />
-                                  <h4 className="text-[13px] font-black text-white truncate uppercase tracking-tight">{item.name}</h4>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest leading-none">₹{item.price}</p>
-                                  <span className="text-[8px] font-black uppercase text-white/20 bg-white/5 px-2 py-0.5 rounded-md leading-none">{item.category}</span>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center gap-2 bg-white/5 p-0.5 rounded-xl border border-white/5 shadow-inner">
-                                <button 
-                                  onClick={() => handleUpdatePreorder(item, -1)}
-                                  disabled={quantity === 0}
-                                  className={cn(
-                                    "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
-                                    quantity > 0 ? "bg-white/10 text-white hover:bg-white/20" : "text-white/10 cursor-not-allowed"
-                                  )}
-                                >
-                                  <Minus size={12} />
-                                </button>
-                                <span className={cn("text-[11px] font-black min-w-[18px] text-center", quantity > 0 ? "text-white" : "text-white/20 font-mono")}>{quantity}</span>
-                                <button 
-                                  onClick={() => handleUpdatePreorder(item, 1)}
-                                  className="w-7 h-7 rounded-lg bg-amber-500 text-black flex items-center justify-center hover:bg-amber-400 transition-all shadow-md shadow-amber-500/20"
-                                >
-                                  <Plus size={12} />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Sticky Summary Bar */}
-                      {formData.totalItems > 0 && (
-                        <motion.div 
-                          initial={{ y: 20, opacity: 0 }}
-                          animate={{ y: 0, opacity: 1 }}
-                          className="sticky bottom-0 bg-amber-500 p-6 rounded-[2rem] flex items-center justify-between shadow-2xl shadow-amber-500/40"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-black/20 flex items-center justify-center text-black">
-                              <ShoppingCart size={20} />
-                            </div>
-                            <div>
-                               <p className="text-[10px] font-black uppercase tracking-widest text-black/40">Total Items</p>
-                               <h5 className="text-lg font-black text-black leading-none">{formData.totalItems} Items selected</h5>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                             <p className="text-[10px] font-black uppercase tracking-widest text-black/40">Amount</p>
-                             <h4 className="text-2xl font-black text-black leading-none">₹{formData.totalAmount}</h4>
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-                  )}
-
-                  {step === 5 && (
+                  {step === 3 && (
                     <div className="space-y-8">
-                       <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 space-y-6">
-                          <div className="flex justify-between items-start">
-                             <div>
-                                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Reservation Type</p>
-                                <p className="text-sm font-black text-white uppercase">{formData.reservationType}</p>
+                       <div className="bg-white/[0.02] border border-white/10 rounded-[2rem] p-6 space-y-6">
+                          <div className="flex justify-between items-center bg-white/[0.05] p-4 rounded-2xl border border-white/5">
+                             <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-amber-500 text-black flex items-center justify-center font-black">
+                                   {formData.guests}
+                                </div>
+                                <div>
+                                   <p className="text-xs font-black text-white leading-none">{formData.salutation} {formData.guestName}</p>
+                                   <p className="text-[10px] text-white/40 mt-1 uppercase tracking-widest">{formData.date} @ {formData.time}</p>
+                                </div>
                              </div>
                              <div className="text-right">
-                                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Seating</p>
-                                <p className="text-sm font-black text-amber-500 uppercase">
-                                  {formData.reservationType === 'section' ? `Section: ${SECTIONS.find(s => s.id === formData.sectionId)?.name}` : `Tables: ${formData.selectedTables.join(', ')}`}
+                                <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">Seating</p>
+                                <p className="text-[10px] font-black text-amber-500 uppercase">
+                                  {formData.reservationType === 'section' ? 'Full Section' : `Tables: ${formData.selectedTables.join(', ')}`}
                                 </p>
                              </div>
                           </div>
-                          
-                          <div className="grid grid-cols-2 gap-8 pt-6 border-t border-white/5">
-                             <div>
-                                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Guest</p>
-                                <p className="text-sm font-bold text-white">{formData.salutation} {formData.guestName}</p>
-                                {formData.email && <p className="text-[10px] text-white/40 mt-1">{formData.email}</p>}
-                             </div>
-                             <div>
-                                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Schedule</p>
-                                <p className="text-sm font-bold text-white">{formData.date} at {formData.time}</p>
-                             </div>
-                          </div>
 
-                          <div className="grid grid-cols-2 gap-8 pt-6 border-t border-white/5">
-                             <div>
-                                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Guests</p>
-                                <p className="text-sm font-bold text-white">{formData.guests} PAX</p>
+                          <div className="space-y-4">
+                             <div className="flex items-center justify-between px-2">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40 flex items-center gap-2">
+                                  <ShoppingCart size={12} />
+                                  Pre-Order Menu (Optional)
+                                </h4>
+                                <div className="relative flex-1 max-w-[150px] ml-4">
+                                  <Search size={10} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
+                                  <input 
+                                    className="w-full bg-white/5 border border-white/5 rounded-xl h-8 pl-8 pr-2 text-[10px] outline-none focus:border-amber-500/50" 
+                                    placeholder="Fast pick..."
+                                    value={menuSearch}
+                                    onChange={e => setMenuSearch(e.target.value)}
+                                  />
+                                </div>
                              </div>
-                             <div>
-                                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Session</p>
-                                <p className="text-sm font-bold text-white">{formData.session}</p>
-                             </div>
-                          </div>
 
-                          {formData.preorderItems.length > 0 && (
-                            <div className="pt-6 border-t border-white/5 space-y-4">
-                               <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Selected Pre-Orders</p>
-                               <div className="space-y-2">
-                                  {formData.preorderItems.map(item => (
-                                    <div key={item.itemId} className="flex justify-between items-center bg-white/[0.03] px-4 py-3 rounded-2xl border border-white/5 transition-all hover:bg-white/[0.05] hover:border-amber-500/20">
+                             <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto no-scrollbar pr-1">
+                                {filteredMenu.slice(0, 10).map(item => {
+                                  const quantity = formData.preorderItems.find(i => i.itemId === item.id)?.qty || 0;
+                                  return (
+                                    <div key={item.id} className="flex justify-between items-center p-3 rounded-xl bg-white/[0.02] border border-white/5 group border-transparent hover:border-amber-500/20 transition-all">
                                       <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 text-[10px] font-black">
-                                          {item.qty}×
-                                        </div>
-                                        <span className="text-xs font-bold text-white/90">{item.name}</span>
+                                        <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", item.type === 'veg' ? "bg-emerald-500" : "bg-red-500")} />
+                                        <span className="text-xs font-bold text-white/70">{item.name} <span className="text-[10px] text-white/20 ml-2">₹{item.price}</span></span>
                                       </div>
-                                      <span className="text-xs font-black text-amber-500">₹{item.price * item.qty}</span>
+                                      <div className="flex items-center gap-3">
+                                        {quantity > 0 && (
+                                          <button onClick={() => handleUpdatePreorder(item, -1)} className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center text-white/40"><Minus size={12} /></button>
+                                        )}
+                                        <span className={cn("text-[11px] font-black min-w-[14px] text-center", quantity > 0 ? "text-amber-500" : "text-white/10")}>{quantity}</span>
+                                        <button onClick={() => handleUpdatePreorder(item, 1)} className="w-6 h-6 rounded-lg bg-amber-500 text-black flex items-center justify-center shadow-lg shadow-amber-500/20"><Plus size={12} /></button>
+                                      </div>
                                     </div>
-                                  ))}
-                                  <div className="flex justify-between items-center pt-4 px-2 border-t border-white/5">
-                                    <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Summary</span>
-                                    <span className="text-xl font-black text-amber-500 tracking-tighter">₹{formData.totalAmount}</span>
+                                  );
+                                })}
+                             </div>
+                          </div>
+
+                          {formData.totalItems > 0 && (
+                            <div className="p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex justify-between items-center animate-in fade-in slide-in-from-bottom-2">
+                               <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-emerald-500 text-black flex items-center justify-center">
+                                     <Check size={16} />
                                   </div>
+                                  <div>
+                                     <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-none">Pre-order Total</p>
+                                     <p className="text-xs font-black text-white mt-1">{formData.totalItems} Items Added</p>
+                                  </div>
+                               </div>
+                               <div className="text-right">
+                                  <p className="text-xl font-black text-white tracking-tighter">₹{formData.totalAmount}</p>
                                </div>
                             </div>
                           )}
                        </div>
 
-                       <div className="flex items-center gap-4 p-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
-                          <AlertCircle className="text-amber-500 shrink-0" size={20} />
-                          <p className="text-[10px] font-bold text-amber-500/80 uppercase leading-relaxed">Please ensure all details are correct. Tables will be locked immediately after confirmation.</p>
+                       <div className="flex items-center gap-4 p-5 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
+                          <AlertCircle className="text-amber-500 shrink-0" size={16} />
+                          <p className="text-[9px] font-black text-amber-500/60 uppercase tracking-widest leading-relaxed">
+                            Tables are held for 15 mins. No-show without notice may result in cancellation.
+                          </p>
                        </div>
                     </div>
                   )}
@@ -1328,8 +1234,10 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                   </button>
                 )}
                 <button
+                  id="res-modal-action-btn"
+                  data-8848-id="res-modal-action-btn"
                   disabled={loading || !isStepValid}
-                  onClick={step === 5 ? handleSubmit : nextStep}
+                  onClick={step === 3 ? handleSubmit : nextStep}
                   className={cn(
                     "flex-[2] h-14 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl",
                     isStepValid ? "bg-amber-500 text-black hover:bg-amber-600" : "bg-white/5 text-white/20 cursor-not-allowed border border-white/5"
@@ -1337,7 +1245,7 @@ const NewReservationModal: React.FC<NewReservationModalProps> = ({ isOpen, onClo
                 >
                   {loading ? <Loader2 className="animate-spin" /> : (
                     <>
-                      {step === 5 ? "Confirm Reservation" : "Continue"}
+                      {step === 3 ? "Confirm Reservation" : "Continue"}
                     </>
                   )}
                 </button>

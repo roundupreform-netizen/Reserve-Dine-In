@@ -25,7 +25,8 @@ import {
   MapPin,
   CreditCard,
   PieChart as PieIcon,
-  Search
+  Search,
+  Layout
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -176,6 +177,7 @@ const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelected
 }) => {
   const { user, userData } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [tables, setTables] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [crmSearch, setCrmSearch] = useState('');
@@ -193,12 +195,21 @@ const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelected
   const todayStr = useMemo(() => format(selectedDate, 'yyyy-MM-dd'), [selectedDate]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'reservations'), (snap) => {
+    if (!user) return;
+    const unsubRes = onSnapshot(collection(db, 'reservations'), (snap) => {
       setReservations(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reservation)));
-      setLoading(false);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'reservations'));
-    return unsub;
-  }, []);
+
+    const unsubTables = onSnapshot(collection(db, 'tables'), (snap) => {
+      setTables(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'tables'));
+
+    return () => {
+      unsubRes();
+      unsubTables();
+    };
+  }, [user]);
 
   const stats = useMemo(() => {
     const today = reservations.filter(r => r.date === todayStr);
@@ -206,7 +217,11 @@ const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelected
     const takeaway = today.filter(r => r.serviceType === 'takeaway' || (!r.serviceType && r.session === 'Takeaway')); 
     const delivery = today.filter(r => r.serviceType === 'delivery');
     const highTea = today.filter(r => r.session === 'Snacks' || r.session === 'High Tea');
-    const occupancy = Math.min(100, Math.round(((today.filter(r => ['Arrived', 'Seated', 'Dining'].includes(r.status)).length) / 24) * 100));
+    
+    // Dynamic occupancy based on actual tables
+    const tableCount = tables.length || 24; // fallback 24
+    const diningNow = today.filter(r => ['Arrived', 'Seated', 'Dining'].includes(r.status));
+    const occupancy = Math.min(100, Math.round((diningNow.length / tableCount) * 100));
 
     const sessions: Record<string, Reservation[]> = {
       Breakfast: today.filter(r => r.session === 'Breakfast'),
@@ -342,6 +357,9 @@ const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelected
           <div className="flex flex-wrap items-center gap-4">
             <LiveStatus />
             <motion.button 
+              id="dashboard-new-booking"
+              data-8848-id="dashboard-new-booking"
+              data-tactical="true"
               whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(16,185,129,0.4)" }}
               whileTap={{ scale: 0.95 }}
               onClick={onNewReservation}
@@ -392,8 +410,8 @@ const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelected
                 <h3 className="text-3xl font-black tracking-tighter text-white">{stats.preorders.length}</h3>
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Pre-Orders Today</p>
                 <div className="flex gap-1 mt-4">
-                  {['P', 'C', 'R'].map((s, i) => (
-                    <div key={i} className="flex-1 h-1 bg-white/5 rounded-full bg-amber-500/20" />
+                  {['P', 'C', 'R'].map((s) => (
+                    <div key={s} className="flex-1 h-1 bg-white/5 rounded-full bg-amber-500/20" />
                   ))}
                 </div>
               </div>
@@ -481,9 +499,13 @@ const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelected
                     </div>
                   </div>
                   <div className="flex -space-x-4">
-                    {[Crown, Cake, UserPlus].map((I, i) => (
-                      <div key={i} className="w-10 h-10 rounded-full bg-[#0A0A0C] border-2 border-white/5 flex items-center justify-center text-emerald-500">
-                        <I size={14} />
+                    {[
+                      { icon: Crown, id: 'crown' },
+                      { icon: Cake, id: 'cake' },
+                      { icon: UserPlus, id: 'user-plus' }
+                    ].map((item) => (
+                      <div key={item.id} className="w-10 h-10 rounded-full bg-[#0A0A0C] border-2 border-white/5 flex items-center justify-center text-emerald-500">
+                        <item.icon size={14} />
                       </div>
                     ))}
                   </div>
@@ -540,19 +562,59 @@ const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelected
           <div className="space-y-8">
             {/* Table Occupancy Visualization */}
             <div className="bg-white/[0.02] border border-white/5 p-10 rounded-[3rem] space-y-8">
-              <div>
-                <h3 className="text-xl font-black text-white uppercase tracking-tighter">Live Occupancy</h3>
-                <p className="text-xs text-white/40">Real-time floor state</p>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-xl font-black text-white uppercase tracking-tighter">Live Occupancy</h3>
+                  <p className="text-xs text-white/40">Real-time floor state</p>
+                </div>
+                {tables.length > 0 && (
+                  <button 
+                    onClick={() => onNavigate?.('management')}
+                    className="p-2 hover:bg-white/5 rounded-xl text-white/20 hover:text-emerald-500 transition-colors"
+                  >
+                    <Layout size={16} />
+                  </button>
+                )}
               </div>
-              <CircularProgress value={stats.occupancy} label="Active Floors" sublabel="Capacity utilized" />
+              
+              {tables.length > 0 ? (
+                <div className="grid grid-cols-4 gap-2">
+                  {tables.slice(0, 12).map((t) => {
+                    const isOccupied = stats.today.some(r => r.tableId === t.id && ['Arrived', 'Seated', 'Dining'].includes(r.status));
+                    const isReserved = stats.today.some(r => r.tableId === t.id && r.status === 'Confirmed');
+                    
+                    return (
+                      <div 
+                        key={t.id} 
+                        className={cn(
+                          "aspect-square rounded-xl flex items-center justify-center text-[8px] font-black transition-all border",
+                          isOccupied ? "bg-emerald-500/20 border-emerald-500 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]" :
+                          isReserved ? "bg-blue-500/10 border-blue-500/30 text-blue-500" :
+                          "bg-white/5 border-white/5 text-white/20"
+                        )}
+                        title={`Table ${t.name} - ${isOccupied ? 'Occupied' : isReserved ? 'Reserved' : 'Available'}`}
+                      >
+                        {t.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <CircularProgress value={stats.occupancy} label="Active Floors" sublabel="Capacity utilized" />
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
                   <p className="text-[10px] font-bold text-white/40 uppercase mb-1">Available</p>
-                  <p className="text-xl font-black text-emerald-500">18</p>
+                  <p className="text-xl font-black text-emerald-500">
+                    {(tables.length || 24) - stats.today.filter(r => ['Arrived', 'Seated', 'Dining'].includes(r.status)).length}
+                  </p>
                 </div>
                 <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
                   <p className="text-[10px] font-bold text-white/40 uppercase mb-1">Reserved</p>
-                  <p className="text-xl font-black text-blue-500">6</p>
+                  <p className="text-xl font-black text-blue-500">
+                    {stats.today.filter(r => r.status === 'Confirmed').length}
+                  </p>
                 </div>
               </div>
             </div>
@@ -576,8 +638,8 @@ const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelected
                 </ResponsiveContainer>
               </div>
               <div className="space-y-3">
-                {sourceData.map((s, i) => (
-                  <div key={i} className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                {sourceData.map((s) => (
+                  <div key={s.name} className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
                       <span className="text-white/60">{s.name}</span>
@@ -969,11 +1031,11 @@ const DashboardView = ({ onNavigate, onNewReservation, selectedDate, setSelected
                 <div className="h-0.5 w-full bg-white/5 absolute top-1/2 -translate-y-1/2" />
                 <div className="relative flex justify-between">
                   {[
-                    { label: 'Confirmed', done: true },
-                    { label: 'Out for Delivery', done: true },
-                    { label: 'Arriving', done: false }
-                  ].map((step, i) => (
-                    <div key={i} className="flex flex-col items-center gap-2 relative z-10">
+                    { label: 'Confirmed', id: 'confirmed', done: true },
+                    { label: 'Out for Delivery', id: 'out-for-delivery', done: true },
+                    { label: 'Arriving', id: 'arriving', done: false }
+                  ].map((step) => (
+                    <div key={step.id} className="flex flex-col items-center gap-2 relative z-10">
                       <div className={cn("w-4 h-4 rounded-full", step.done ? "bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]" : "bg-white/10")} />
                       <span className={cn("text-[8px] font-black uppercase tracking-widest", step.done ? "text-white" : "text-white/20")}>{step.label}</span>
                     </div>

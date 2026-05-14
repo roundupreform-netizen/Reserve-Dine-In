@@ -16,8 +16,15 @@ import { Toaster } from 'react-hot-toast';
 import AIOrb from './components/8848/AIOrb';
 import DiagnosticEngine from './components/8848/DiagnosticEngine';
 import WalkthroughEngine from './components/8848/WalkthroughEngine';
+import { TrainerOverlay8848 } from './components/8848/8848TrainerOverlay';
+import { LanguageMenu8848 } from './components/8848/8848LanguageMenu';
 import { useAIContextSync } from './hooks/use8848';
 import { useAIStore } from './store/useAIStore';
+
+import { navigationEngine, actionEngine } from './services/8848/8848ActionEngine';
+
+import { HighlightOverlay8848 } from './components/8848/8848HighlightOverlay';
+import { ChatWindow8848 } from './components/8848/8848ChatWindow';
 
 function App() {
   const { user, userData, loading } = useAuth();
@@ -32,26 +39,27 @@ function App() {
     isNewReservationModalOpen ? 'new_reservation' : null
   );
 
+  // Register AI Navigation Engine
+  useEffect(() => {
+    navigationEngine.register({
+      setTab: (tab) => setActiveTab(tab),
+      setModal: (name, open) => {
+        if (name === 'new_reservation') setIsNewReservationModalOpen(open);
+      }
+    });
+  }, []);
+
   // AI Action Listener
   useEffect(() => {
-    const unsubscribe = useAIStore.subscribe((state) => {
-      const lastAction = state.messages[state.messages.length - 1]?.actions?.[0];
-      if (!lastAction) return;
-
-      switch (lastAction.type) {
-        case 'navigate':
-          if (lastAction.params?.page) {
-            setActiveTab(lastAction.params.page as NavItem);
-          }
-          break;
-        case 'openModal':
-          if (lastAction.params?.modalName === 'new_reservation') {
-            setIsNewReservationModalOpen(true);
-          }
-          break;
-        case 'closeModal':
-          setIsNewReservationModalOpen(false);
-          break;
+    const unsubscribe = useAIStore.subscribe((state, prevState) => {
+      const lastMessage = state.messages[state.messages.length - 1];
+      const prevMessage = prevState.messages[prevState.messages.length - 1];
+      
+      // Only trigger if it's a new AI message with actions
+      if (lastMessage?.role === 'ai' && lastMessage !== prevMessage && lastMessage.actions) {
+        lastMessage.actions.forEach((action: any) => {
+          actionEngine.execute(action);
+        });
       }
     });
     return unsubscribe;
@@ -140,6 +148,10 @@ function App() {
       {/* 8848 METERS AI LAYER */}
       <DiagnosticEngine />
       <WalkthroughEngine />
+      <TrainerOverlay8848 />
+      <LanguageMenu8848 />
+      <HighlightOverlay8848 />
+      <ChatWindow8848 />
       <AIOrb />
       <Toaster 
         position="top-right"

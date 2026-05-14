@@ -302,6 +302,8 @@ const ReservationsView = ({ onNewReservation, selectedDate, setSelectedDate }: {
               <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
               <input 
                 type="text" 
+                id="res-search-input"
+                data-8848-id="res-search-input"
                 placeholder="Find customer..." 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -309,6 +311,9 @@ const ReservationsView = ({ onNewReservation, selectedDate, setSelectedDate }: {
               />
             </div>
             <Button 
+              id="new-reservation-btn"
+              data-8848-id="new-reservation-btn"
+              data-tactical="true"
               onClick={() => onNewReservation?.()}
               className="h-12 bg-amber-500 hover:bg-amber-600 text-black font-black uppercase tracking-widest px-8 rounded-xl shadow-lg"
             >

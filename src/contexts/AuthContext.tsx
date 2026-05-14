@@ -15,6 +15,7 @@ interface AuthContextType {
   error: string | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
+  isAuthReady: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -59,20 +60,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
         }
       } else {
-        // MOCK BYPASS: When not logged in, provide a persistent mock admin
-        setUser({
-          uid: 'mock-admin-id',
-          email: 'admin@everest.dev',
-          displayName: 'System Admin',
-          emailVerified: true,
-          isAnonymous: false,
-        } as any);
-        setUserData({
-          uid: 'mock-admin-id',
-          email: 'admin@everest.dev',
-          displayName: 'System Admin',
-          role: 'admin'
-        });
+        setUser(null);
+        setUserData(null);
       }
       setLoading(false);
       setIsSigningIn(false);
@@ -111,7 +100,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading: loading || !isAuthReady || isSigningIn, 
       error, 
       login, 
-      logout 
+      logout,
+      isAuthReady
     }}>
       {children}
     </AuthContext.Provider>

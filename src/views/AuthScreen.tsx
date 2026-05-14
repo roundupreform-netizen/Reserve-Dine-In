@@ -12,7 +12,7 @@ export default function AuthScreen() {
   const { t } = useTranslation();
 
   return (
-    <div className="min-h-screen bg-[#0A0A0C] flex flex-col items-center justify-center p-6 bg-[radial-gradient(circle_at_20%_20%,_rgba(16,185,129,0.15)_0%,_transparent_40%),_radial-gradient(circle_at_80%_80%,_rgba(59,130,246,0.1)_0%,_transparent_40%)]">
+    <div className="min-h-screen bg-[#1a0f0a] flex flex-col items-center justify-center p-6 bg-[radial-gradient(circle_at_20%_20%,_rgba(249,115,22,0.1)_0%,_transparent_40%),_radial-gradient(circle_at_80%_80%,_rgba(120,53,15,0.1)_0%,_transparent_40%)]">
       <div className="absolute top-8 right-8">
         <LanguageSwitcher />
       </div>
@@ -20,44 +20,40 @@ export default function AuthScreen() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center"
+        className="text-center w-full max-w-md"
       >
-        <Logo8848 
-          size={120} 
-          glow 
-          pulse 
-          animated 
-          className="mx-auto mb-8"
-        />
+        <div className="mb-8 flex justify-center">
+          <div className="relative">
+            <div className="absolute inset-0 bg-orange-500 blur-3xl opacity-20 rounded-full animate-pulse" />
+            <Utensils size={80} className="text-orange-500 relative z-10" />
+          </div>
+        </div>
         
-        <h1 className="text-5xl font-bold tracking-tighter text-white mb-2 italic">Reserve Dine In</h1>
-        <p className="text-white/30 text-[10px] uppercase tracking-[0.4em] font-bold mb-12">{t('ai.poweredBy', 'Powered by 8848 Meters Intelligence')}</p>
+        <h1 className="text-5xl font-black tracking-tighter text-stone-100 mb-2">Reserve Dine In</h1>
+        <p className="text-orange-500/80 text-sm font-bold uppercase tracking-[0.3em] mb-4">Smart Reservations for Smart Restaurants</p>
+        <p className="text-stone-500 text-[10px] uppercase tracking-[0.4em] font-bold mb-12">Everest Developers | Goa</p>
 
         {error && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-semibold max-w-sm mx-auto"
+            className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-semibold"
           >
             {error}
           </motion.div>
         )}
 
-        <div className="w-full max-w-xs mx-auto">
+        <div className="w-full max-w-xs mx-auto space-y-4">
           <Button 
-            className="w-full h-16 bg-emerald-500 text-white hover:bg-emerald-600 shadow-[0_15px_35px_rgba(16,185,129,0.2)] border-none text-sm font-black uppercase tracking-[0.2em]"
-            style={{ borderStyle: 'ridge', borderRadius: '25px', borderWidth: '20px' }}
+            className="w-full h-16 bg-orange-600 hover:bg-orange-700 text-white shadow-[0_15px_30px_rgba(249,115,22,0.3)] border-none text-sm font-black uppercase tracking-[0.2em] rounded-2xl transition-all"
             onClick={login}
           >
             <LogIn size={20} />
-            {t('common.login', 'Secure Login')}
+            Sign in with Google
           </Button>
           
-          <p 
-            className="text-[9px] uppercase tracking-[0.3em] font-bold mt-8"
-            style={{ textAlign: 'center', fontStyle: 'normal', textDecoration: 'none', fontWeight: 'normal', borderColor: '#010101', borderRadius: '1px', borderWidth: '1px', borderStyle: 'groove', backgroundColor: '#040500' }}
-          >
-            {t('common.internalAccess', 'Internal Management Access')}
+          <p className="text-stone-500 text-[9px] uppercase tracking-[0.2em] font-bold">
+            Authorized Personnel Only
           </p>
         </div>
       </motion.div>
